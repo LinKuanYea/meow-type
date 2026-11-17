@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>喵打</title>
 <meta name="description" content="喵打：貓咪打字練習與 PK，程式、英文、中文都能練。">
+<!--OG-->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;700&display=swap">
 <link rel="stylesheet" href="/style.css?v=__APP_VERSION__">
 <script src="/boot.js?v=__APP_VERSION__"></script>
@@ -67,6 +68,13 @@
 <div class="toast" id="toast" role="status"></div>
 <button class="newver" id="newver" type="button" hidden>有新版本，點這裡更新</button>
 
+<div class="ov" id="chal" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="chalTitle">
+    <h2 id="chalTitle">挑戰</h2>
+    <div id="chalBody"></div>
+    <div class="btns"><button class="main" type="button" id="chalGo">接受挑戰</button><button type="button" id="chalNo">先自己練習</button></div>
+  </div>
+</div>
 <div class="ov" id="consent" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-labelledby="ch">
     <h2 id="ch">開始之前</h2>
@@ -77,7 +85,7 @@
         <li>練了哪個題庫、模式，速度、正確率、花多久</li>
         <li>錯誤種類的次數（全形半形、縮排、分號…）、倒退次數、擋下貼上的次數</li>
         <li>有沒有再回來練：瀏覽器會存一個隨機編號，不含個人資料</li>
-        <li>你<strong>自己按「上排行榜」</strong>時，會存你填的暱稱和成績</li>
+        <li>你<strong>自己按「上排行榜」或「分享挑戰」</strong>時，會存你填的暱稱、成績和題目；分享連結任何拿到的人都看得到</li>
       </ul></div>
       <div><h3>不會記錄</h3><ul>
         <li>姓名、學號（暱稱請不要填真實姓名）</li>

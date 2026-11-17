@@ -164,6 +164,7 @@ try {
   eq((await postJ("/api/learn", { c: "cpp", l: "x" })).status, 400, "格式不對的學一下紀錄");
   eq((await postJ("/api/client-error", { msg: "測試", ua: "x" })).status, 204, "前端錯誤回報");
   ok((await get("/boot.js")).status === 200, "開機檢查程式");
+  ok((await get("/share.js")).status === 200 && (await get("/cat.js")).status === 200, "分享與貓咪程式");
   ok((await get("/learn.js")).status === 200 && (await get("/shared/bank-code.js")).status === 200, "學一下與程式題庫");
 
   const spec = { c: "cpp", l: "para", i: [1] }, text = textOf(spec);
@@ -186,6 +187,19 @@ try {
   eq((await (await get(`/api/board?c=cpp&l=para&m=full&p=all`)).json()).length, 1, "可疑成績不上榜");
   const s4 = await postJ("/api/score", { ...body, speed: 999 }); ok((await s4.json()).flagged, "前端報的速度和驗算不同：可疑");
   eq((await postJ("/api/score", { ...body, name: "幹你" })).status, 400, "不適合的暱稱");
+  // 分享挑戰
+  const sh = await (await postJ("/api/share", { ...body, name: "分享貓" })).json();
+  ok(sh.ok && /^[0-9A-Za-z]{8}$/.test(sh.id), "產生分享連結 " + JSON.stringify(sh));
+  const got = await (await get("/api/share/" + sh.id)).json();
+  ok(got.name === "分享貓" && got.c === "cpp" && got.specs[0].i[0] === spec.i[0] && !("cid" in got) && Math.abs(got.speed - r0.sum.speed) < 0.01, "讀分享內容（不外流編號）");
+  const page = await (await get("/c/" + sh.id)).text();
+  ok(page.includes('og:title" content="分享貓 向你挑戰喵打！"') && page.includes("/app.js?v=abc1234"), "挑戰連結的網頁與預覽文字");
+  ok(!(await (await get("/")).text()).includes("<!--OG-->"), "首頁的 OG 標記有換掉");
+  eq((await get("/api/share/zzzzzzzz")).status, 404, "不存在的分享");
+  eq((await postJ(`/api/share/${sh.id}/accept`, {})).status, 204, "接受挑戰");
+  eq((await postJ(`/api/share/${sh.id}/win`, {})).status, 204, "挑戰結果");
+  eq((await postJ("/api/share", { ...body, name: "機器人", events: bot, speed: replay({ texts: [text], rule: "back", cat: "cpp", events: bot }).sum.speed })).status, 400, "可疑成績不能分享");
+  eq((await postJ("/api/share", { ...body, name: "<x>" })).status, 200, "分享暱稱過濾符號");
   eq((await postJ("/api/score", { ...body, events: evs.slice(0, 10) })).status, 400, "沒打完的成績不收");
   eq((await postJ("/api/score", { ...body, specs: [{ c: "py", l: "para", i: [1] }] })).status, 400, "題目和類別對不上");
   eq((await postJ("/api/score", { ...body, name: "<b>x</b>" }).then((r) => r.json())).ok, true, "暱稱的 HTML 符號會被去掉");
@@ -196,9 +210,10 @@ try {
   const stHtml = await st.text();
   ok(st.status === 200 && stHtml.includes("上課檢查") && stHtml.includes("學一下"), "統計頁");
   const ex = await (await get("/stats/export.json", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") })).json();
-  ok(ex.runs.length === 1 && ex.scores.length >= 4 && ex.learn.length === 1, "匯出資料");
+  ok(ex.runs.length === 1 && ex.scores.length >= 4 && ex.learn.length === 1 && ex.shares.length === 2 && ex.shares.some((x) => x.views >= 1 && x.accepts === 1 && x.wins === 1), "匯出資料");
+  ok(stHtml.includes("分享挑戰"), "統計頁有分享挑戰");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
-} catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack); }
+} catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }
 finally { srv.kill(); rmSync(dir, { recursive: true, force: true }); }
 
 console.log(`測試：${pass} 項通過，${fail} 項失敗`);

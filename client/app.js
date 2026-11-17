@@ -1,6 +1,8 @@
 // 喵打：前端
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
+import { catSVG } from "/cat.js";
+import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
 import { analyze, tips, drillText, baseKey, show, esc, classify } from "/shared/analyze.js";
 
@@ -34,14 +36,6 @@ const txt = $("#txt"), ta = $("#ta"), box = $("#box"), comp = $("#comp");
 let R = null, spans = [], composing = false, lastComp = { t: 0, d: "" }, raf = 0, lastSpec = null;
 
 /* ---------- 像素貓 ---------- */
-const BODY = ["..........k...k.", ".........kok.kok", ".........koooook", "k........kooeoek", "ko.......kooopok", ".ko.kkkkkkoooook", "..kkoooooooooook", "..kowwoooooowwk.", "..koooooooooook.", "...kkkkkkkkkkk.."];
-const LEGS = [["...ko.ko..ko.ko.", "...kk.kk..kk.kk."], ["....koko..koko..", "....kkkk..kkkk.."]];
-function catSVG(f, ghost) {
-  const P = ghost ? { k: "#5b5b66", o: "#b9b9c6", w: "#e6e6ee", e: "#333", p: "#c9a0aa" } : { k: "#3b2418", o: "#f2a03d", w: "#fff3e0", e: "#1a1a1a", p: "#f08da0" };
-  let r = "";
-  BODY.concat(LEGS[f]).forEach((row, y) => [...row].forEach((c, x) => { if (c !== ".") r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${P[c]}"/>`; }));
-  return `<svg viewBox="0 0 16 12" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
-}
 const SV = [[catSVG(0, 0), catSVG(1, 0)], [catSVG(0, 1), catSVG(1, 1)]];
 const me = $("#me"), gh = $("#ghost");
 function setCat(el, g, f) { if (el._f === f) return; el.querySelector("svg")?.remove(); el.insertAdjacentHTML("afterbegin", SV[g][f]); el._f = f; }
@@ -71,6 +65,8 @@ function newRun(text, drill, spec) {
   else { if (!spec) { spec = randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; } text = textOf(spec); }
   R = { ty: null, specs: spec ? [spec] : [], spec0: spec, start: 0, ended: false, endT: 0, pastes: 0, ime: 0, drill: !!drill, text0: text, pb: drill ? null : store.get(pbKey(), null), rival: drill ? null : rival };
   // 灰貓：挑戰對手的速度，沒有的話用這台電腦的最佳紀錄。速度換算成每分鐘打對幾個字元（WPM × 5）
+  // 從分享連結挑戰：1 分鐘模式照對方的題目順序出
+  R.queue = R.rival?.specs && spec && JSON.stringify(spec) === JSON.stringify(R.rival.specs[0]) ? R.rival.specs.slice(1).map((x) => ({ ...x })) : [];
   R.ghost = R.rival ? { cpm: R.rival.c === "zh" ? R.rival.speed : R.rival.speed * 5 } : R.pb;
   if (R.ghost && !R.ghost.chars) R.ghost.chars = R.ghost.cpm;
   R.ty = new Typist(S.rule, chunkDone);
@@ -132,7 +128,7 @@ function event(ev) {
 }
 function chunkDone(ty) {
   if (timed()) {
-    const spec = randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; R.specs.push(spec);
+    const spec = R.queue.length ? R.queue.shift() : randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; R.specs.push(spec);
     ty.setText(textOf(spec)); build();
     return;
   }
@@ -210,6 +206,7 @@ function finish(ms) {
     ${S.cat !== "zh" ? `<div class="s"><small>字元／分</small><strong>${Math.round(cpm)}</strong></div>` : ""}</div>
    ${canBoard ? `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label><input id="nick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(store.get("mt-nick", ""))}" autocomplete="off"><button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p></form>`
       : !R.drill && online ? `<div class="submit"><p>正確率 90% 以上、打對 20 個字以上才能上排行榜。</p></div>` : ""}
+   ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? { can: true, nick: store.get("mt-nick", "") } : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
    ${L ? L.html : ""}
    <div class="cols"><div><h3>建議</h3><ul class="tips">${T.map(([b, t]) => `<li><b>${b}</b>${t}</li>`).join("") || "<li><b>很穩</b>這次沒有明顯的問題。</li>"}</ul></div>
    <div><h3>錯誤分類</h3><div class="chips">${chip("全形半形", c.width.length)}${isCode() ? chip("縮排", c.indent.length) + chip("大小寫", c.kase.length) : ""}${S.cat === "cpp" ? chip("分號", c.semi.length) : ""}${isCode() ? chip("Enter", c.enter.length) : ""}${chip("其他", c.other.length)}</div>
@@ -218,6 +215,13 @@ function finish(ms) {
    ${A.pauses.length ? `<h3 style="margin-top:16px">停最久的地方</h3><ol class="pz">${A.pauses.map((k) => `<li><code>${esc(show(k.exp))}</code> 前停了 ${(k.gap / 1000).toFixed(1)} 秒</li>`).join("")}</ol>` : ""}</div></div>
    <div class="btns"><button class="main" id="bAgain" type="button">同一題再一次</button><button id="bNew" type="button">換一題</button>${A.E.length ? '<button id="bDrill" type="button">針對弱點練習</button>' : ""}</div></div>`;
   $("#res").hidden = false;
+  const won = R.rival && sp > R.rival.speed;
+  if (R.rival?.share && !R.rival.reported) { R.rival.reported = true; post(`/api/share/${R.rival.share}/${won ? "win" : "lose"}`, {}); }
+  bindShare($("#res"), {
+    toast,
+    create: (name) => { store.set("mt-nick", name); return post("/api/share", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice(), ms: Math.round(ms), speed: sp }); },
+    imageData: { c: S.cat, l: S.len, m: S.mode, rule: S.rule, speed: sp, acc: A.acc, ms, correct: A.correct, ts: Date.now(), beat: won && !R.rival.me ? R.rival.name : null },
+  });
   if (L) {
     const it0 = R.specs[0];
     learnLog = { c: S.cat, l: S.len, item: it0 ? it0.i.join(",") : "", quiz: /id="quiz"/.test(L.html) ? 1 : 0, answered: 0, correct: 0, skipped: 0, opened: 0,
@@ -385,8 +389,37 @@ $("#cYes").onclick = () => {
   consent = true; store.set(CONSENT_KEY, true); ensureCid();
   $("#consent").hidden = true; ta.focus();
   if (first) visit();
+  openChallenge();
 };
-$("#cNo").onclick = () => { consent = false; store.set(CONSENT_KEY, false); $("#consent").hidden = true; ta.focus(); };
+$("#cNo").onclick = () => { consent = false; store.set(CONSENT_KEY, false); $("#consent").hidden = true; ta.focus(); openChallenge(); };
+
+/* ---------- 打開別人分享的挑戰連結（/c/xxxxxxxx） ---------- */
+const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(location.pathname)?.[1] || "";
+let chalOpened = false;
+async function openChallenge() {
+  if (!shareId || chalOpened) return;
+  chalOpened = true;
+  let sh = null;
+  try { const r = await fetch("/api/share/" + shareId); sh = r.ok ? await r.json() : null; } catch {}
+  const box = $("#chal");
+  if (!sh) {
+    $("#chalBody").innerHTML = '<p>找不到這個挑戰，可能連結打錯了。直接開始練習吧！</p>';
+    $("#chalGo").hidden = true; box.hidden = false; $("#chalNo").focus(); return;
+  }
+  $("#chalTitle").textContent = `${sh.name} 向你挑戰！`;
+  $("#chalBody").innerHTML = `<p>${esc(sh.name)} 在「${setText(sh)}」打出 <b>${Math.round(sh.speed)} ${unitOf(sh.c)}</b>，正確率 ${Math.round(sh.acc * 100)}%。接受挑戰就會打同一題，跑道上的灰貓用 ${esc(sh.name)} 的速度跑。</p><img id="chalImg" alt="${esc(sh.name)} 的成績圖片">`;
+  box.hidden = false; $("#chalGo").focus();
+  drawResultImage({ ...sh, url: null }).then((b) => { const img = $("#chalImg"); if (img) img.src = URL.createObjectURL(b); });
+  $("#chalGo").onclick = () => {
+    box.hidden = true;
+    post(`/api/share/${sh.id}/accept`, {});
+    Object.assign(S, { cat: sh.c, len: sh.l, mode: sh.m, rule: sh.rule, unit: "" });
+    store.set("mt-settings", S); syncSeg(); syncUnit();
+    rival = { name: sh.name, speed: sh.speed, c: sh.c, l: sh.l, m: sh.m, share: sh.id, specs: sh.specs };
+    newRun(null, false, { ...sh.specs[0] }); loadBoard();
+  };
+}
+$("#chalNo").onclick = () => { $("#chal").hidden = true; ta.focus(); };
 $("#showConsent").onclick = showConsent;
 function visit() { if (consent === true) post("/api/visit", { cid: CID, sid: SID, device, sw: screen.width, sh: screen.height }); }
 
@@ -407,5 +440,5 @@ setInterval(checkVersion, 60000);
 
 /* ---------- 開始 ---------- */
 syncSeg(); syncUnit(); newRun(); loadBoard();
-if (consent === null && online) showConsent(); else visit();
+if (consent === null && online) showConsent(); else { visit(); openChallenge(); }
 window.__mtReady = true;

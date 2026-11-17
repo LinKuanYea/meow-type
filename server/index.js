@@ -7,9 +7,9 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { CATS, LENS, textOf } from "../shared/bank.js";
-import { RULES, replay } from "../shared/judge.js";
-import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, boards, exportAll, renderStatsPage, cleanId } from "./stats.js";
+import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
+import { RULES, replay, unitOf } from "../shared/judge.js";
+import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, exportAll, renderStatsPage, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -47,7 +47,7 @@ function playing() { const t = Date.now(); for (const [k, v] of active) if (t - 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com", "connect-src 'self'", "img-src 'self' data:",
+  "font-src https://fonts.gstatic.com", "connect-src 'self'", "img-src 'self' data: blob:",
   "base-uri 'none'", "frame-ancestors 'none'", "form-action 'none'",
 ].join("; ");
 const SEC_HEADERS = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Content-Security-Policy": CSP, "Cache-Control": "no-cache" };
@@ -60,6 +60,8 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(res, url.searchParams);
+    const sm = /^\/api\/share\/([0-9A-Za-z]{8})$/.exec(url.pathname);
+    if (sm) { const sh = getShare(sm[1], true); return sh ? json(res, 200, sh) : json(res, 404, { error: "找不到這個挑戰，可能連結打錯了" }); }
     if (url.pathname === "/api/boards") {
       const p = ["day", "week", "all"].includes(url.searchParams.get("p")) ? url.searchParams.get("p") : "day";
       return json(res, 200, boards(p, cleanId(url.searchParams.get("me"))));
@@ -68,7 +70,8 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
     if (url.pathname === "/version") return json(res, 200, { version: APP_VERSION, label: VERSION_LABEL });
     let p = decodeURIComponent(url.pathname);
-    if (p === "/") p = "/index.html";
+    const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
+    if (p === "/" || shareId) p = "/index.html";
     let base = CLIENT_DIR, rel = p;
     if (p.startsWith("/shared/")) { base = SHARED_DIR; rel = p.slice("/shared".length); }
     const file = path.resolve(base, "." + rel);
@@ -78,6 +81,7 @@ export const server = http.createServer(async (req, res) => {
     if (base === CLIENT_DIR && /^text\/(html|javascript)/.test(type)) {
       data = data.toString("utf8").replaceAll("__APP_VERSION_LABEL__", VERSION_LABEL).replaceAll("__APP_VERSION__", APP_VERSION);
     }
+    if (type.startsWith("text/html")) data = String(data).replace("<!--OG-->", ogTags(shareId));
     // JS 的 import 網址都加上版本號：瀏覽器或 Cloudflare 快取了舊的檔案也不會混到新版（v0.2.1 出過「舊 bank.js＋新 app.js」）
     if (type.startsWith("text/javascript")) data = versionImports(data.toString("utf8"));
     res.writeHead(200, { "Content-Type": type, ...SEC_HEADERS, ...(type.startsWith("text/html") ? { "Cache-Control": "no-store" } : {}) });
@@ -87,6 +91,16 @@ export const server = http.createServer(async (req, res) => {
     res.end("找不到這個頁面");
   }
 });
+
+/** 分享連結的預覽文字（LINE、Messenger 等貼上連結時顯示） */
+function ogTags(shareId) {
+  const sh = shareId && getShare(shareId, false);
+  const title = sh ? `${sh.name} 向你挑戰喵打！` : "喵打：貓咪打字練習";
+  const desc = sh ? `${CAT_NAME[sh.c]}・${LEN_NAME[sh.l]}・${sh.m === "t60" ? "1 分鐘" : "打完一題"}：${Math.round(sh.speed)} ${unitOf(sh.c)}，正確率 ${Math.round(sh.acc * 100)}%。你打得贏嗎？`
+    : "程式、英文、中文打字練習，打完告訴你哪裡可以更好。";
+  const e = (x) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  return `<meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}"><meta property="og:type" content="website">`;
+}
 
 export function versionImports(js) {
   return js.replace(/(\bfrom\s*["'])((?:\.{1,2})?\/[^"'?]+\.js)(["'])/g, `$1$2?v=${APP_VERSION}$3`);
@@ -108,7 +122,7 @@ function readJson(req, limit) {
   });
 }
 async function handleApi(req, res, pathname) {
-  const body = await readJson(req, pathname === "/api/score" ? 512 * 1024 : 4096);
+  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" ? 512 * 1024 : 4096);
   if (body === "too-big") { res.writeHead(413, { Connection: "close" }); res.end(); res.on("finish", () => req.socket.destroy()); return; }
   if (!body || typeof body !== "object") return json(res, 400, { error: "格式不對" });
   try {
@@ -118,6 +132,9 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/run") { recordRun(body); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body);
+    if (pathname === "/api/share") return handleShareCreate(res, body);
+    const ev = /^\/api\/share\/([0-9A-Za-z]{8})\/(accept|win|lose)$/.exec(pathname);
+    if (ev) { shareEvent(ev[1], ev[2]); return json(res, 204); }
     if (pathname === "/api/client-error") {
       const clip = (x, n) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").slice(0, n);
       if (clientErrs++ < 60) console.warn(`[前端錯誤] v=${clip(body.v, 12)} ${clip(body.msg, 300)} ｜ ${clip(body.ua, 200)}`);
@@ -136,26 +153,47 @@ export function cleanName(s) {
 }
 export const badName = (s) => { const t = s.toLowerCase().replace(/[\s._\-*]/g, ""); return BAD.some((w) => t.includes(w)); };
 
-function handleScore(res, b) {
+/**
+ * 驗證一局的成績（排行榜、分享共用）：暱稱、設定、題目、重播按鍵紀錄。
+ * 回傳 { error } 或 { cid, name, specs, sum, flags }
+ */
+function verifyRun(b, { minAcc, minCorrect, what }) {
   const cid = cleanId(b.cid), name = cleanName(b.name);
-  if (!cid) return json(res, 400, { error: "格式不對" });
-  if (!name) return json(res, 400, { error: "先填一個暱稱" });
-  if (badName(name)) return json(res, 400, { error: "暱稱有不適合的字，換一個吧" });
-  if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m) || !RULES.includes(b.rule)) return json(res, 400, { error: "格式不對" });
+  if (!cid) return { error: "格式不對" };
+  if (!name) return { error: "先填一個暱稱" };
+  if (badName(name)) return { error: "暱稱有不適合的字，換一個吧" };
+  if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m) || !RULES.includes(b.rule)) return { error: "格式不對" };
   const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];
-  if (!specs.length || (b.m === "full" && specs.length !== 1) || specs.some((s) => !s || s.c !== b.c || s.l !== b.l)) return json(res, 400, { error: "題目對不上" });
+  if (!specs.length || (b.m === "full" && specs.length !== 1) || specs.some((x) => !x || x.c !== b.c || x.l !== b.l)) return { error: "題目對不上" };
   const texts = specs.map(textOf);
-  if (texts.some((t) => !t)) return json(res, 400, { error: "題目對不上" });
+  if (texts.some((t) => !t)) return { error: "題目對不上" };
   const r = replay({ texts, rule: b.rule, cat: b.c, events: b.events, limitMs: b.m === "t60" ? 60000 : null });
-  if (!r.ok) return json(res, 400, { error: "成績驗算沒過：" + r.reason });
-  const s = r.sum;
-  if (s.acc < 0.9 || s.correct < 20) return json(res, 400, { error: "正確率 90% 以上、打對 20 個字以上才能上排行榜" });
+  if (!r.ok) return { error: "成績驗算沒過：" + r.reason };
+  if (r.sum.acc < minAcc || r.sum.correct < minCorrect) return { error: `正確率 ${Math.round(minAcc * 100)}% 以上、打對 ${minCorrect} 個字以上才能${what}` };
   const flags = r.flags.slice();
-  if (typeof b.speed !== "number" || Math.abs(b.speed - s.speed) > 1) flags.push("mismatch");
-  const out = recordScore({ cid, name, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
+  if (typeof b.speed !== "number" || Math.abs(b.speed - r.sum.speed) > 1) flags.push("mismatch");
+  return { cid, name, specs: specs.map((x) => ({ c: x.c, l: x.l, i: x.i })), sum: r.sum, flags };
+}
+
+function handleScore(res, b) {
+  const v = verifyRun(b, { minAcc: 0.9, minCorrect: 20, what: "上排行榜" });
+  if (v.error) return json(res, 400, { error: v.error });
+  const s = v.sum, flags = v.flags;
+  const out = recordScore({ cid: v.cid, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
   if (flags.length) console.warn(`[排行榜] 可疑成績（${flags.join(",")}）：${b.c}/${b.l}/${b.m} ${s.speed.toFixed(1)}`);
   json(res, 200, { ok: true, flagged: flags.length > 0, rank: out.rank, speed: s.speed, acc: s.acc });
 }
+
+/* ---------- 分享挑戰 ---------- */
+function handleShareCreate(res, b) {
+  const v = verifyRun(b, { minAcc: 0.8, minCorrect: 10, what: "分享" });
+  if (v.error) return json(res, 400, { error: v.error });
+  if (v.flags.length) { console.warn(`[分享] 可疑成績不給分享（${v.flags.join(",")}）`); return json(res, 400, { error: "這次的打字節奏不太像人打的，不能分享" }); }
+  const s = v.sum;
+  const id = createShare({ cid: v.cid, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, specs: v.specs, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms) });
+  json(res, 200, { ok: true, id, speed: s.speed, acc: s.acc });
+}
+const SHARE_ID = /^[0-9A-Za-z]{8}$/;
 
 function handleBoard(res, q) {
   const c = q.get("c"), l = q.get("l"), m = q.get("m"), p = ["day", "week", "all"].includes(q.get("p")) ? q.get("p") : "day";

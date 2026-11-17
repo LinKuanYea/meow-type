@@ -1,6 +1,7 @@
 // 匿名練習統計＋排行榜：SQLite（Node 內建 node:sqlite），存在 /data/stats.db
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { BANK, CATS, LENS, CAT_NAME, LEN_NAME } from "../shared/bank.js";
 
@@ -24,6 +25,9 @@ export function initStats(file) {
       speed REAL, acc REAL, correct INTEGER, ms INTEGER, flag TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS learn (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, cid TEXT, sid TEXT, cat TEXT, len TEXT, item TEXT,
       quiz INTEGER, answered INTEGER, correct INTEGER, skipped INTEGER, opened INTEGER);
+    CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, cid TEXT, name TEXT, cat TEXT, len TEXT, mode TEXT, rule TEXT,
+      specs TEXT, speed REAL, acc REAL, correct INTEGER, ms INTEGER, views INTEGER NOT NULL DEFAULT 0, accepts INTEGER NOT NULL DEFAULT 0,
+      wins INTEGER NOT NULL DEFAULT 0, loses INTEGER NOT NULL DEFAULT 0);
     CREATE INDEX IF NOT EXISTS scores_board ON scores(cat, len, mode, ts);
     CREATE INDEX IF NOT EXISTS runs_ts ON runs(ts);
   `);
@@ -49,6 +53,31 @@ export function recordLearn(r) {
   const item = typeof r.item === "string" && /^[0-9,]{1,60}$/.test(r.item) ? r.item : null;
   db.prepare("INSERT INTO learn (ts,cid,sid,cat,len,item,quiz,answered,correct,skipped,opened) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
     .run(Date.now(), cleanId(r.cid), cleanId(r.sid), r.c, r.l, item, r.quiz ? 1 : 0, r.answered ? 1 : 0, r.correct ? 1 : 0, r.skipped ? 1 : 0, int(r.opened, 500));
+}
+
+/* ---------- 分享挑戰 ---------- */
+const B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+export function createShare(x) {
+  for (let k = 0; k < 5; k++) {
+    const id = Array.from(randomBytes(8), (b) => B62[b % 62]).join("");
+    try {
+      db.prepare("INSERT INTO shares (id,ts,cid,name,cat,len,mode,rule,specs,speed,acc,correct,ms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .run(id, Date.now(), x.cid, x.name, x.c, x.l, x.m, x.rule, JSON.stringify(x.specs), x.speed, x.acc, x.correct, x.ms);
+      return id;
+    } catch (e) { if (!/UNIQUE|PRIMARY/.test(e.message)) throw e; }
+  }
+  throw new Error("分享編號重複");
+}
+/** 給別人看的分享內容（不含 cid）；count＝算一次瀏覽 */
+export function getShare(id, count) {
+  const r = db.prepare("SELECT * FROM shares WHERE id=?").get(id);
+  if (!r) return null;
+  if (count) db.prepare("UPDATE shares SET views=views+1 WHERE id=?").run(id);
+  return { id: r.id, ts: r.ts, name: r.name, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
+}
+export function shareEvent(id, kind) {
+  const col = { accept: "accepts", win: "wins", lose: "loses" }[kind];
+  if (col) db.prepare(`UPDATE shares SET ${col}=${col}+1 WHERE id=?`).run(id);
 }
 
 /* ---------- 排行榜 ---------- */
@@ -89,6 +118,7 @@ export function exportAll() {
     runs: db.prepare("SELECT * FROM runs").all(),
     scores: db.prepare("SELECT * FROM scores").all(),
     learn: db.prepare("SELECT * FROM learn").all(),
+    shares: db.prepare("SELECT id, ts, cid, name, cat, len, mode, rule, speed, acc, correct, ms, views, accepts, wins, loses FROM shares").all(),
   };
 }
 
@@ -118,6 +148,8 @@ export function renderStatsPage() {
   const dev = q("SELECT device, COUNT(*) n FROM visits GROUP BY device ORDER BY n DESC");
   const ret = one(`SELECT COUNT(*) u, SUM(CASE WHEN days>1 THEN 1 ELSE 0 END) back FROM (SELECT cid, COUNT(DISTINCT ${dayExpr}) days FROM visits WHERE cid IS NOT NULL GROUP BY cid)`);
   const recent = q("SELECT * FROM scores ORDER BY id DESC LIMIT 40");
+  const sh = one("SELECT COUNT(*) n, COALESCE(SUM(views),0) v, COALESCE(SUM(accepts),0) a, COALESCE(SUM(wins),0) w, COALESCE(SUM(loses),0) l FROM shares");
+  const shDaily = q(`SELECT ${dayExpr} d, COUNT(*) n, SUM(views) v, SUM(accepts) a, SUM(wins) w, SUM(loses) l FROM shares GROUP BY d ORDER BY d DESC LIMIT 14`);
   const learn = q(`SELECT cat, len, COUNT(*) n, SUM(quiz) quiz, SUM(answered) ans, SUM(correct) ok, SUM(skipped) skip,
       AVG(opened) opened, SUM(CASE WHEN opened>0 THEN 1 ELSE 0 END) anyopen FROM learn GROUP BY cat, len ORDER BY cat, len`);
   const hard = q(`SELECT cat, len, item, COUNT(*) n, SUM(correct) ok FROM learn WHERE answered=1 GROUP BY cat, len, item HAVING n >= 3 ORDER BY 1.0*ok/n LIMIT 10`);
@@ -140,6 +172,9 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{b
     learn.map((r) => [CAT_NAME[r.cat] || esc(r.cat), LEN_NAME[r.len] || esc(r.len), r.n, r.quiz, r.ans, r.ans ? pct(r.ok / r.ans) : "—", r.skip, r.anyopen, r1(r.opened)]))}</div>
 <p class="n">答對率最低的題目（作答 3 次以上）</p>
 <div class="wrap">${table(["題目", "作答", "答對率"], hard.map((r) => [esc(itemName(r.cat, r.len, r.item)), r.n, pct(r.ok / r.n)]))}</div>
+<h2>分享挑戰</h2><p class="n">分享出去的挑戰連結：被打開幾次、幾次有人接受挑戰、挑戰者贏或輸（依建立連結的日期）。</p>
+<div class="k"><div>分享<b>${sh.n}</b></div><div>被打開<b>${sh.v}</b></div><div>接受挑戰<b>${sh.a}</b></div><div>挑戰者贏<b>${sh.w}</b></div><div>挑戰者輸<b>${sh.l}</b></div></div>
+<div class="wrap">${table(["日期", "分享", "被打開", "接受挑戰", "挑戰者贏", "挑戰者輸"], shDaily.map((r) => [r.d, r.n, r.v, r.a, r.w, r.l]))}</div>
 <h2>打錯時的規則</h2><div class="wrap">${table(["規則", "局數", "正確率", "平均速度"], rules.map((r) => [RULE[r.rule] || esc(r.rule), r.n, pct(r.acc), r1(r.sp)]))}</div>
 <h2>裝置</h2><div class="wrap">${table(["裝置", "造訪"], dev.map((r) => [({ desktop: "電腦", tablet: "平板", mobile: "手機" })[r.device] || esc(r.device), r.n]))}</div>
 <h2>最近的排行榜成績</h2><div class="wrap">${table(["時間", "暱稱", "題庫", "長度", "模式", "規則", "速度", "正確率", "狀態"],
