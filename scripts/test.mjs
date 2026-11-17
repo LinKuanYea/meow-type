@@ -146,6 +146,10 @@ try {
   ok(home.status === 200 && html.includes("喵打") && html.includes("abc1234") && !html.includes("__APP_VERSION"), "首頁與版本號");
   ok(home.headers.get("content-security-policy")?.includes("script-src 'self'"), "首頁有 CSP");
   ok((await get("/app.js")).status === 200 && (await get("/shared/judge.js")).status === 200, "前端與共用程式");
+  const appJs = await (await get("/app.js")).text(), anJs = await (await get("/shared/analyze.js")).text();
+  ok(appJs.includes('from "/shared/bank.js?v=abc1234"') && appJs.includes('from "/learn.js?v=abc1234"'), "前端 import 網址帶版本號");
+  ok(anJs.includes('from "./bank.js?v=abc1234"'), "共用程式 import 網址帶版本號");
+  ok((await get("/shared/bank.js?v=abc1234")).status === 200, "帶版本號的網址讀得到");
   ok((await get("/shared/../server/index.js")).status === 404 && (await get("/%2e%2e/server/index.js")).status === 404, "不能讀到伺服器程式");
   const sid = "a".repeat(24), cid = "b".repeat(24);
   eq((await (await get("/healthz")).json()).playing, 0, "一開始沒人在打字");

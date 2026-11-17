@@ -74,6 +74,8 @@ export const server = http.createServer(async (req, res) => {
     if (base === CLIENT_DIR && /^text\/(html|javascript)/.test(type)) {
       data = data.toString("utf8").replaceAll("__APP_VERSION_LABEL__", VERSION_LABEL).replaceAll("__APP_VERSION__", APP_VERSION);
     }
+    // JS 的 import 網址都加上版本號：瀏覽器或 Cloudflare 快取了舊的檔案也不會混到新版（v0.2.1 出過「舊 bank.js＋新 app.js」）
+    if (type.startsWith("text/javascript")) data = versionImports(data.toString("utf8"));
     res.writeHead(200, { "Content-Type": type, ...SEC_HEADERS, ...(type.startsWith("text/html") ? { "Cache-Control": "no-store" } : {}) });
     res.end(req.method === "HEAD" ? undefined : data);
   } catch {
@@ -81,6 +83,10 @@ export const server = http.createServer(async (req, res) => {
     res.end("找不到這個頁面");
   }
 });
+
+export function versionImports(js) {
+  return js.replace(/(\bfrom\s*["'])((?:\.{1,2})?\/[^"'?]+\.js)(["'])/g, `$1$2?v=${APP_VERSION}$3`);
+}
 
 /* ---------- API ---------- */
 const rate = new Map();

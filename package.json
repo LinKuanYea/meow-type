@@ -1,6 +1,6 @@
 {
   "name": "meow-type",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "喵打：貓咪打字練習與 PK",
   "type": "module",
