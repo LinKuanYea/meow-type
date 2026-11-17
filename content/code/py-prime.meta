@@ -1,0 +1,12 @@
+title: 質數判斷
+unit: Counting Loop
+summary: 從 2 試到 N-1，有任何一個數能整除 N，就不是質數；全部都不能整除才是質數。
+input: 49
+wrong: 49是質數！
+wrong: 49會被2整除，所以不是質數。
+wrong: 49會被7整除，所以不是質數。\n49是質數！
+@ isPrime = True => 先假設是質數。Python 的 True、False 開頭要大寫。
+@ for i in range(2, N): => range(2, N) 是 2、3、…、N-1，不包含 N。
+@ if N % i == 0: => 能整除就找到因數了。
+@ break => 找到一個就夠，直接跳出迴圈。
+@ if isPrime: => 迴圈結束後還是 True，代表沒有任何因數。

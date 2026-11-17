@@ -1,5 +1,5 @@
 // 打完後的分析與建議（規則式，不用 AI）
-import { BANK } from "./bank.js";
+import { BANK, itemText } from "./bank.js";
 import { speedOf } from "./judge.js";
 
 const SHIFT = { "~": "`", "!": "1", "@": "2", "#": "3", $: "4", "%": "5", "^": "6", "&": "7", "*": "8", "(": "9", ")": "0", _: "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", '"': "'", "<": ",", ">": ".", "?": "/" };
@@ -86,7 +86,7 @@ export function tips(A, { cat, rule, pastes = 0, ime = 0 }) {
 /** 針對弱點練習：挑出含有常錯字元最多的題目 */
 export function drillText(A, cat) {
   const errs = A.topKeys.slice(0, 3).map((x) => x[0]);
-  const b = BANK[cat];
+  const b = Object.fromEntries(Object.entries(BANK[cat]).map(([k, a]) => [k, a.map(itemText)]));
   if (isCode(cat)) {
     if (A.cls.indent.length) return b.para.slice().sort((x, y) => (y.match(/\n {8}/g) || []).length - (x.match(/\n {8}/g) || []).length)[0];
     const lines = [...new Set(Object.values(b).flat().flatMap((t) => t.split("\n")).map((s) => s.trim()).filter((s) => s.length > 6))];

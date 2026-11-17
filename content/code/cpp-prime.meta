@@ -1,0 +1,12 @@
+title: 質數判斷
+unit: Conditional Loop
+summary: 從 2 試到 N-1，只要有一個數能整除 N，N 就不是質數，印出原因後用 break 提早離開迴圈。
+input: 91
+wrong: 91是質數！
+wrong: 91會被13整除，所以不是質數。
+wrong: 91會被7整除，所以不是質數。91是質數！
+@ bool isPrime = true; => 先假設 N 是質數，找到反例再改成 false。bool 只能存 true 或 false。
+@ for (int t = 2; t <= N-1; t = t + 1) { => t 從 2 試到 N-1。
+@ if (N % t == 0) { => 餘數是 0 代表 t 能整除 N。
+@ break; => 找到一個因數就夠了，break 直接跳出迴圈，不再試後面的數。
+@ if (isPrime) { => 整個迴圈都沒找到因數，isPrime 還是 true，才印出「是質數」。

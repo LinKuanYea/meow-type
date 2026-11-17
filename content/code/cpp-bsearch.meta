@@ -1,0 +1,15 @@
+title: 二分搜尋實驗 A：追蹤每一步
+unit: Sort
+summary: 在排好序的陣列裡用二分搜尋找 x：每次看中間那個數，比 x 小就只找右半邊，比 x 大就只找左半邊。每一步都印出 left、right、mid 和中間的數。
+input: 7\n2 5 8 12 16 23 38\n23
+wrong: 0 6 3 12\n3 6 4 16\n4 6 5 23\n找到
+wrong: 0 6 3 12\n4 6 5 23
+wrong: 0 7 3 12\n4 7 5 23\n找到
+@ int left = 0, right = n-1; => 一開始的搜尋範圍是整個陣列。
+@ while (right - left >= 0) { => 範圍裡還有數字就繼續找。
+@ int mid = (left + right) / 2; => 中間的位置；整數除法會自動捨去小數。
+@ cout << left => 印出這一步的搜尋範圍、中間位置和中間的數。
+@ if (nums[mid] == x) { => 剛好找到。
+@ else if (nums[mid] < x) { => 中間的數太小，答案一定在右半邊，所以 left 移到 mid + 1。
+@ else { => 中間的數太大，答案在左半邊，right 移到 mid - 1。
+@ if (!found) { => ! 是「不是」：沒有找到才印「找不到」。

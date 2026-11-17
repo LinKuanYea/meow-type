@@ -1,0 +1,9 @@
+title: 倍數判斷
+unit: Selection Structure
+summary: 讀入 x 和 y，用取餘數判斷 x 是不是 y 的倍數：餘數是 0 就是倍數。
+input: 12 5
+wrong: Yes
+wrong: 2
+wrong: Yes\nNo
+@ if (x % y == 0) { => x 除以 y 的餘數等於 0，代表整除，x 就是 y 的倍數。注意比較相等要用兩個等號 ==。
+@ else { => 上面的條件不成立時，才會跑 else 裡面的程式。

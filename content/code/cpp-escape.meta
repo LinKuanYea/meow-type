@@ -1,0 +1,8 @@
+title: ><"\\
+unit: Basic Input and Output
+summary: 只用一行 cout 印出兩行符號，練習「跳脫字元」：想印出 " 和 \ 這種有特殊意義的字，前面要多加一個反斜線。
+input:
+wrong: >"<\\n\|/
+wrong: >"<\\\\\n\\|/
+wrong: >"<\\ \|/
+@ cout << => 字串裡 \" 會印出 "，\\ 會印出一個 \，\n 會換行。所以 \\\\ 印出兩個反斜線 \\。

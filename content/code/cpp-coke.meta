@@ -1,0 +1,13 @@
+title: 肥宅快樂水（瓶子）
+unit: Conditional Loop
+summary: 一瓶可樂 27 元，4 個空瓶可以換 1 瓶新的。用 while 迴圈一直換，算出總共喝幾瓶、最後剩幾個空瓶。
+input: 270
+wrong: 10 10
+wrong: 13 2
+wrong: 12 2
+@ coke = money / 27; => 整數除法：錢能買幾瓶。
+@ bottle = coke; => 喝完的可樂都變成空瓶。
+@ while (bottle >= 4) { => 只要空瓶還夠 4 個，就繼續換。
+@ bottle = bottle - 4; => 拿 4 個空瓶去換，
+@ coke = coke + 1; => 多喝了一瓶，
+@ bottle = bottle + 1; => 喝完又多一個空瓶。

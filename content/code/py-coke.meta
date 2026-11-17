@@ -1,0 +1,12 @@
+title: 肥宅快樂水（瓶子）
+unit: Conditional Loop
+summary: 一瓶 27 元，4 個空瓶換 1 瓶。這個版本每一輪把能換的空瓶一次換完，算出總共喝幾瓶、剩幾個空瓶。
+input: 300
+wrong: 11 11
+wrong: 14 3
+wrong: 13 1
+@ coke = money // 27 => 整數除法：錢能買幾瓶。
+@ while bottle >= 4: => 空瓶夠 4 個就繼續換。
+@ ex = bottle // 4 => 這一輪一次能換幾瓶。
+@ bottle = bottle % 4 => 換完剩下湊不滿 4 個的空瓶，
+@ bottle += ex => 換來的可樂喝完又變成空瓶。+= 是「加上」的簡寫。

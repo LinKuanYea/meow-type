@@ -121,3 +121,47 @@ table.lb{width:100%;border-collapse:collapse;font-size:15px}
 .newver{position:fixed;right:14px;bottom:14px;background:var(--gin);color:#fff;border:0;border-radius:12px;padding:0 16px;min-height:44px;font:inherit;font-weight:700;cursor:pointer;z-index:8}
 .newver[hidden]{display:none}
 .submit button:disabled{opacity:.5;cursor:default}
+/* ---------- 單元選單 ---------- */
+.grp[hidden]{display:none}
+.grp select{font:inherit;font-size:15px;min-height:38px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:0 8px;max-width:14em}
+.grp select:focus-visible{outline:3px solid var(--gin);outline-offset:1px}
+/* ---------- 學一下 ---------- */
+.learn{margin-top:22px;border:2px dashed var(--gin);border-radius:14px;padding:clamp(12px,2.5vw,20px)}
+.learn h3{font-size:18px;margin:0 0 10px}
+.learn h3 small{font-size:13px;font-weight:400;color:var(--todo)}
+.learn .q{margin:0 0 8px}
+.learn .inl{margin:6px 0 2px;font-size:13px;color:var(--todo)}
+pre.out{margin:0;font:15px/1.45 "JetBrains Mono","Noto Sans TC",monospace;white-space:pre-wrap;word-break:break-all;background:var(--soft);border-radius:8px;padding:6px 10px;text-align:left}
+.opts2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:8px;margin:10px 0}
+.opt{font:inherit;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);padding:6px;cursor:pointer;min-height:44px}
+.opt:hover:not(:disabled){border-color:var(--gin)}
+.opt:focus-visible{outline:3px solid var(--gin);outline-offset:2px}
+.opt:disabled{cursor:default;opacity:.65}
+.opt.right{border-color:var(--grass);opacity:1;box-shadow:0 0 0 2px var(--grass)}
+.opt.wrong{border-color:var(--bad);opacity:1}
+.verdict{font-weight:700;margin:4px 0 0}.verdict.ok{color:var(--grass)}.verdict.no{color:var(--bad)}
+.explain[hidden]{display:none}
+.explain .sum{font-size:16px;margin:12px 0}
+.codebox{background:var(--soft);border-radius:10px;padding:8px 10px;overflow-x:auto}
+.cbh{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--todo);margin-bottom:4px}
+.ln{font:14px/1.6 "JetBrains Mono","Noto Sans TC",monospace;white-space:pre}
+.ln code{font:inherit}
+details.ln summary{cursor:pointer;list-style:none;color:var(--ink)}
+details.ln summary::-webkit-details-marker{display:none}
+details.ln summary::before{content:"▸";color:var(--gin);margin-left:-1em;width:1em;display:inline-block}
+details.ln[open] summary::before{content:"▾"}
+details.ln summary:hover code{background:var(--card)}
+details.ln p{white-space:normal;font:14px/1.6 "Noto Sans TC",sans-serif;margin:2px 0 6px;padding:6px 10px;background:var(--card);border-left:3px solid var(--gin);border-radius:4px}
+.codebox>.ln,.codebox>details.ln{padding-left:1em}
+dl.vocab{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:8px;margin:0}
+dl.vocab div{background:var(--soft);border-radius:10px;padding:8px 12px}
+dl.vocab dt{font-weight:700}
+dl.vocab dt i{font-weight:400;color:var(--todo);font-size:14px}
+dl.vocab dt code{font-family:"JetBrains Mono",monospace;font-weight:600;white-space:pre-wrap;word-break:break-all}
+dl.vocab dd{margin:2px 0 0}
+dl.vocab dd small{display:block;color:var(--todo);font-size:13px}
+.lv{font-size:12px;font-weight:700;border-radius:6px;padding:0 6px;vertical-align:1px}
+.lv1{background:#dff1d6;color:#2d5a1f}.lv2{background:#ffe2c4;color:#7a3d06}
+.cat.hop svg{animation:hop .6s}
+@keyframes hop{30%{transform:translateY(-26px)}60%{transform:translateY(0)}75%{transform:translateY(-8px)}}
+@media(prefers-reduced-motion:reduce){.cat.hop svg{animation:none}}

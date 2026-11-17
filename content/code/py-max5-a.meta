@@ -1,0 +1,11 @@
+title: 五數最大值
+unit: Conditional Loop
+summary: 一行讀一個數，共五個。left 是目前最大的數，每讀一個新的就比一次，比較大的就交換到 left。
+input: 3\n8\n6\n12\n1
+wrong: 1
+wrong: 8
+wrong: 3
+@ left = int(input()) => 先讀第一個數，當作目前最大的。
+@ for t in range(4): => range(4) 是 0、1、2、3，迴圈跑 4 次，讀剩下的四個數。
+@ if right > left: => 新讀的數比較大，
+@ left, right = right, left => Python 可以一行交換兩個變數，不用暫存變數。

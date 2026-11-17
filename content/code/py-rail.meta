@@ -1,0 +1,10 @@
+title: 柵欄密碼加密
+unit: List and Iteration
+summary: 把字串的第 0、2、4… 個字放前面，第 1、3、5… 個字放後面，接起來就是柵欄密碼。
+input: meowmeow
+wrong: mwmwoeoe
+wrong: eoeomwmw
+wrong: mowemowe
+@ first = plain[0::2] => 切片 [開始:結束:間隔]：從第 0 個開始，每隔 2 個拿一個。
+@ second = plain[1::2] => 從第 1 個開始，每隔 2 個拿一個。
+@ cypher = first + second => 字串用 + 接起來。

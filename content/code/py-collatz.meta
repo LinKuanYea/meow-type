@@ -1,0 +1,12 @@
+title: 考拉茲猜想 Collatz Conjecture
+unit: Conditional Loop
+summary: 偶數就除以 2，奇數就乘 3 加 1，一直重複到變成 1 為止，印出過程中的每一個數。
+input: 6
+wrong: 6 3 10 5 16 8 4 2 1
+wrong: 3 10 5 16 8 4 2
+wrong: 3 5 16 8 4 2 1
+@ while n != 1: => 還沒變成 1 就繼續。
+@ if n % 2 == 0: => 偶數。
+@ n = n // 2 => // 是整數除法，結果還是整數（/ 會變成小數）。
+@ n = 3*n + 1 => 奇數就乘 3 加 1。
+@ print(n, end=' ') => end=' ' 讓每個數後面接一個空白，而不是換行。

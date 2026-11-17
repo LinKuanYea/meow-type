@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BANK, CATS, LENS, textOf, randomSpec } from "../shared/bank.js";
+import { BANK, CATS, LENS, textOf, randomSpec, itemText, itemsOf } from "../shared/bank.js";
+import { CODE } from "../shared/bank-code.js";
 import { Typist, replay, summarize, MAX_AHEAD } from "../shared/judge.js";
 import { analyze, tips, classify, drillText } from "../shared/analyze.js";
 
@@ -16,16 +17,27 @@ function eq(a, b, name) { ok(JSON.stringify(a) === JSON.stringify(b), `${name}�
 /* ---------- 題庫 ---------- */
 for (const c of CATS) for (const l of LENS) {
   for (let k = 0; k < 20; k++) ok(typeof textOf(randomSpec(c, l)) === "string", `題庫 ${c}/${l} 能出題`);
-  for (const t of BANK[c][l]) {
+  for (const t of BANK[c][l].map(itemText)) {
     if (c === "cpp" || c === "py") {
       ok(!/\t/.test(t), `程式題不能有 Tab：${t.slice(0, 20)}`);
       ok(!/ +\n| +$/.test(t), `程式題行尾不能有空白：${t.slice(0, 20)}`);
       ok(t.split("\n").every((line) => (line.match(/^ */)[0].length % 4) === 0), `縮排要是 4 的倍數：${t.slice(0, 20)}`);
     }
-    if (c !== "zh") ok(/^[\x20-\x7e\n]*$/.test(t), `${c} 題目只能有半形字元：${t.slice(0, 20)}`);
-    else ok(!/[,.;:!?]/.test(t), `中文題目標點要全形：${t.slice(0, 20)}`);
+    if (c === "en") ok(/^[\x20-\x7e\n]*$/.test(t), `英文題目只能有半形字元：${t.slice(0, 20)}`);
+    if (c === "cpp" || c === "py") ok(!/[；（），：　]/.test(t.replace(/(["'])(?:\\.|(?!\1).)*\1/g, "")), `程式題字串以外不能有全形標點：${t.slice(0, 20)}`);
+    if (c === "zh") ok(!/[,.;:!?]/.test(t), `中文題目標點要全形：${t.slice(0, 20)}`);
   }
 }
+for (const lang of ["cpp", "py"]) for (const it of CODE[lang]) {
+  ok(it.title && it.unit && it.summary, `${it.id}：要有題目名稱、單元、說明`);
+  ok(it.quiz && typeof it.quiz.out === "string" && it.quiz.wrong.length >= 2 && !it.quiz.wrong.includes(it.quiz.out), `${it.id}：預測輸出要有答案和至少 2 個不同的錯誤選項`);
+  const n = it.t.split("\n").length;
+  ok(Object.keys(it.notes).every((k) => +k >= 0 && +k < n), `${it.id}：逐行說明的行號要在程式範圍內`);
+}
+for (const it of BANK.en.word) ok(it.zh && it.pos && [1, 2].includes(it.lv), `英文單字 ${it.t} 要有中文、詞性、程度`);
+for (const it of [...BANK.en.sent, ...BANK.en.para]) ok(it.vocab.length >= 3 && it.vocab.every((x) => x.w && x.zh && x.pos), `英文題目 ${it.t.slice(0, 15)} 要有 3 個以上單字片語`);
+ok(itemsOf({ c: "cpp", l: "para", i: [0] })[0].quiz, "itemsOf 拿得到程式題的說明");
+ok(randomSpec("cpp", "para", null, Math.random, "Sort").i.every((k) => BANK.cpp.para[k].unit === "Sort"), "可以只出某個單元的題目");
 ok(textOf({ c: "cpp", l: "para", i: [999] }) === null, "不存在的題目要回 null");
 ok(textOf({ c: "en", l: "word", i: [1, 2] }) === null, "單詞題數量不對要回 null");
 
@@ -89,7 +101,7 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   return { evs, t };
 }
 {
-  const spec = { c: "cpp", l: "para", i: [0] }, text = textOf(spec);
+  const spec = { c: "cpp", l: "para", i: [BANK.cpp.para.findIndex((x) => x.id === "cpp-bubble")] }, text = textOf(spec);
   const { evs } = human([text], { seed: 3 });
   const r = replay({ texts: [text], rule: "back", cat: "cpp", events: evs, limitMs: null });
   ok(r.ok, "人打的整段：驗算通過 " + (r.reason || "")); eq(r.flags, [], "人打的整段：不可疑");
@@ -106,7 +118,7 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
 }
 {
   // 1 分鐘、好幾段
-  const texts = [0, 1, 2, 3, 4, 5].map((k) => BANK.en.sent[k]);
+  const texts = [0, 1, 2, 3, 4, 5].map((k) => itemText(BANK.en.sent[k]));
   const { evs } = human(texts, { seed: 5, gap: [60, 200], limitMs: 60000 });
   const used = []; let n = 0; const ty = new Typist("back", (t) => { n++; t.setText(texts[n]); }); ty.setText(texts[0]);
   for (const e of evs) ty.apply(e);
@@ -144,6 +156,9 @@ try {
   eq((await postJ("/api/visit", { cid, sid, device: "desktop", sw: 1920, sh: 1080 })).status, 204, "記錄造訪");
   eq((await postJ("/api/run", { cid, sid, device: "desktop", c: "cpp", l: "para", m: "full", rule: "back", ms: 30000, correct: 300, keys: 320, errs: 20, acc: 0.94, speed: 12, width: 2, finished: true })).status, 204, "記錄一局");
   eq((await postJ("/api/run", { c: "xx" })).status, 400, "格式不對的練習紀錄");
+  eq((await postJ("/api/learn", { cid, sid, c: "cpp", l: "para", item: "3", quiz: 1, answered: 1, correct: 1, opened: 2 })).status, 204, "記錄學一下");
+  eq((await postJ("/api/learn", { c: "cpp", l: "x" })).status, 400, "格式不對的學一下紀錄");
+  ok((await get("/learn.js")).status === 200 && (await get("/shared/bank-code.js")).status === 200, "學一下與程式題庫");
 
   const spec = { c: "cpp", l: "para", i: [1] }, text = textOf(spec);
   const { evs } = human([text], { seed: 9 });
@@ -170,9 +185,10 @@ try {
   ok(b2.every((r) => !/[<>]/.test(r.name)), "排行榜暱稱沒有 HTML 符號");
   eq((await get("/stats")).status, 401, "統計頁要密碼");
   const st = await get("/stats", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") });
-  ok(st.status === 200 && (await st.text()).includes("上課檢查"), "統計頁");
+  const stHtml = await st.text();
+  ok(st.status === 200 && stHtml.includes("上課檢查") && stHtml.includes("學一下"), "統計頁");
   const ex = await (await get("/stats/export.json", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") })).json();
-  ok(ex.runs.length === 1 && ex.scores.length >= 4, "匯出資料");
+  ok(ex.runs.length === 1 && ex.scores.length >= 4 && ex.learn.length === 1, "匯出資料");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack); }
 finally { srv.kill(); rmSync(dir, { recursive: true, force: true }); }

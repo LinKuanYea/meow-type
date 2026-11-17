@@ -1,0 +1,10 @@
+title: 字串重複
+unit: Counting Loop
+summary: 讀入一個字串 S 和次數 N，用 for 迴圈把 S 連續印 N 次。
+input: meow 3
+wrong: meow meow meow
+wrong: meow\nmeow\nmeow
+wrong: meowmeow
+@ string S; => 字串變數，存要重複的文字。
+@ for (int t = 1; t <= N; t = t + 1) { => t 從 1 數到 N，迴圈剛好跑 N 次。
+@ cout << S; => 沒有空白也沒有換行，所以會黏在一起。

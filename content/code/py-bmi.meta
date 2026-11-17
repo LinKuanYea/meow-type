@@ -1,0 +1,13 @@
+title: BMI Result
+unit: Selection Structure
+summary: 讀入身高（公分）和體重，算出 BMI 並判斷是過輕、正常還是過重。
+input: 160 50
+wrong: BMI:19.5\nUnderweight
+wrong: BMI:19.53\nNormal
+wrong: BMI:0.0\nUnderweight
+@ height, weight = input().split() => split() 用空白把一行切成兩段，分別給 height 和 weight。
+@ height = float(height) / 100 => 轉成小數，再把公分換成公尺。
+@ bmi = weight / (height ** 2) => ** 是次方：體重除以身高的平方。
+@ print(f'BMI:{bmi:.1f}') => 印到小數點後 1 位。
+@ if (bmi < 18): => 小於 18 是過輕。
+@ else: => 不是過輕，再用一個 if 分正常和過重（巢狀 if）。

@@ -1,0 +1,11 @@
+title: 骰子點數統計與長條圖
+unit: Array and Search
+summary: 讀入 n 次擲骰子的結果，用陣列統計 1～6 點各出現幾次，再印出星號長條圖。
+input: 8\n3 1 3 6 3 2 6 1
+wrong: **\n*\n***\n**
+wrong: 2\n1\n3\n0\n0\n2
+wrong: ***\n**\n**\n*
+@ int vote[7] = {0}; => 7 格全部設成 0。用 vote[1]～vote[6] 記錄 1～6 點的次數，vote[0] 不用。
+@ vote[a] = vote[a] + 1; => 擲出幾點，就讓那一格加 1。點數直接當成陣列的編號。
+@ for (int d = 1; d <= 6; d = d + 1) { => 外層：每一種點數一行。
+@ for (int t = 1; t <= vote[d]; t = t + 1) { => 內層：出現幾次就印幾顆星。出現 0 次就是空行。

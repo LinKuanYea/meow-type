@@ -1,0 +1,10 @@
+title: 圓面積
+unit: Basic Input and Output
+summary: 讀入半徑 r，用「半徑 × 半徑 × 圓周率」算出圓面積並印出來。
+input: 3
+wrong: 28
+wrong: 9.42478
+wrong: 28.2743334
+@ int r; => 宣告一個整數變數 r，用來存半徑。
+@ cin >> r; => 從鍵盤讀一個整數，存進 r。
+@ cout << r*r*3.1415926; => int 乘上小數會變成小數計算；cout 預設最多印 6 位有效數字。

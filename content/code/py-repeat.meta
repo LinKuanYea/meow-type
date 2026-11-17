@@ -1,0 +1,12 @@
+title: 字串重複
+unit: Counting Loop
+summary: 讀入字串 S 和次數 N，用 while 迴圈加計數器 t，把 S 連續印 N 次。
+input: cat 4
+wrong: cat cat cat cat
+wrong: catcatcat
+wrong: cat\ncat\ncat\ncat
+@ S, N = input().split(' ') => 用空白切開，S 是字串，N 還要轉成整數。
+@ t = 0 => 計數器，記錄已經印了幾次。
+@ while t < N: => t 從 0 到 N-1，共 N 次。
+@ print(f'{S}', end='') => end='' 不換行，所以會黏在一起。
+@ t = t + 1 => 記得讓計數器加 1，不然會變成無窮迴圈。

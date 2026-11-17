@@ -1,0 +1,13 @@
+title: Larger Number
+unit: Selection Structure
+summary: 讀入兩個數（可能是整數或小數），印出比較大的那一個；整數就印成整數，不要多出 .0。
+input: 3.0 2.5
+wrong: 3.0
+wrong: 2.5
+wrong: 3.0 2.5
+@ def transformInput(x): => 自己定義一個函式，把「轉成數字」這件事包起來，下面可以重複使用。
+@ x = float(x) => 先一律轉成小數。
+@ if (x % 1 == 0): => 除以 1 的餘數是 0，代表它其實是整數。
+@ x = int(x) => 轉回整數，印出來就不會有 .0。
+@ return x => 把處理好的數字交回去給呼叫它的地方。
+@ x = transformInput(x) => 呼叫上面的函式。

@@ -1,0 +1,11 @@
+title: 五數最大值（一行輸入）
+unit: Counting Loop
+summary: 五個數在同一行，用 map 轉成整數後逐一比較。一開始用 '?' 代表「還沒有最大值」。
+input: -3 -8 -1 -6 -2
+wrong: ?
+wrong: -8
+wrong: 0
+@ nums = map(int, input().split()) => split() 切開後，map(int, …) 把每一段都轉成整數。
+@ max_num = '?' => 用 '?' 標記「還沒有比過」，這樣全部是負數也不會出錯（如果一開始設成 0 就會錯）。
+@ for n in nums: => 一個一個拿出來比。
+@ if max_num == '?' or n > max_num: => 第一個數直接當最大值，之後比較大才更新。

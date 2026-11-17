@@ -1,0 +1,14 @@
+title: 公平成績
+unit: Array and Search
+summary: 七位評審打分數，去掉一個最高分和一個最低分，剩下五個分數取平均。
+input: 80 95 70 88 60 90 85
+wrong: 81.1429
+wrong: 82
+wrong: 413
+@ int score[7]; => 一個可以放 7 個整數的陣列，編號從 score[0] 到 score[6]。
+@ for (int i = 0; i <= 6; i = i + 1) { => 用迴圈把 7 個分數依序讀進陣列。
+@ int max, min = score[0]; => 先把第一個分數當成目前的最大值和最小值。
+@ if (score[i] > max) { => 遇到更大的就更新最大值。
+@ if (score[i] < min) { => 遇到更小的就更新最小值。
+@ float average = 0; => float 是小數，先當成總和用。
+@ average = (average - max - min)/5.0; => 總和扣掉最高和最低，再除以 5.0（寫成小數才是小數除法）。

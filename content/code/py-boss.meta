@@ -1,0 +1,10 @@
+title: 魔王勇者
+unit: Conditional Loop
+summary: 魔王有 100 點血，勇者每次攻擊扣 atk 點；用 while 迴圈一直攻擊，直到血量小於等於 0。
+input: 45
+wrong: hp = 55\nhp = 10
+wrong: hp = 55\nhp = 10\nhp = -35\nhp = -80
+wrong: hp = -35
+@ while hp > 0: => 條件成立就重複執行下面縮排的那幾行。
+@ hp = hp - atk => 每次攻擊扣血。
+@ print(f'hp = {hp}') => f-string：大括號裡的變數會換成它的值。

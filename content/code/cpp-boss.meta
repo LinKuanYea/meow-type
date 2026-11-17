@@ -1,0 +1,11 @@
+title: 魔王勇者
+unit: Conditional Loop
+summary: 魔王有 100 點血，勇者每次攻擊扣 atk 點；用 while 迴圈一直攻擊，直到魔王的血小於等於 0。
+input: 30
+wrong: hp = 70\nhp = 40\nhp = 10
+wrong: hp = 100\nhp = 70\nhp = 40\nhp = 10
+wrong: hp = -20
+@ int hp = 100; => 魔王一開始的血量。
+@ while (hp > 0) { => 只要魔王還有血，就一直重複大括號裡的事。每一輪開始前都會重新檢查條件。
+@ hp = hp - atk; => 每次攻擊扣掉 atk 點血。
+@ cout << "hp = " => 扣完血就印出來，所以最後一行會是 0 或負數。

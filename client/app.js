@@ -1,5 +1,6 @@
 // 喵打：前端
-import { BANK, CAT_NAME, LEN_NAME, randomSpec, textOf } from "/shared/bank.js";
+import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
+import { learnCard } from "/learn.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
 import { analyze, tips, drillText, baseKey, show, esc, classify } from "/shared/analyze.js";
 
@@ -26,7 +27,7 @@ function post(path, body) {
     .then((r) => (r.status === 204 ? {} : r.json())).catch(() => null);
 }
 
-const S = Object.assign({ cat: "cpp", len: "para", mode: "full", rule: "back" }, store.get("mt-settings", {}));
+const S = Object.assign({ cat: "cpp", len: "para", mode: "full", rule: "back", unit: "" }, store.get("mt-settings", {}));
 const isCode = () => S.cat === "cpp" || S.cat === "py";
 const timed = () => S.mode === "t60" && !R.drill;
 const txt = $("#txt"), ta = $("#ta"), box = $("#box"), comp = $("#comp");
@@ -52,7 +53,14 @@ function trip() { me.classList.remove("trip"); void me.offsetWidth; me.classList
 const pbKey = () => `mt-pb-${S.cat}-${S.len}-${S.mode}`;
 
 /* ---------- 一局 ---------- */
+/* 學一下的使用紀錄：離開結算畫面時送出 */
+let learnLog = null;
+function flushLearn() {
+  if (learnLog && consent === true) post("/api/learn", { cid: CID, sid: SID, c: learnLog.c, l: learnLog.l, item: learnLog.item, quiz: learnLog.quiz, answered: learnLog.answered, correct: learnLog.correct, skipped: learnLog.skipped, opened: learnLog.opened });
+  learnLog = null;
+}
 function abandon() {
+  flushLearn();
   if (R && R.ty.started && !R.ended) { sendRun(false); post("/api/end", { sid: SID }); }
 }
 /** newRun()：隨機新題；newRun(null, false, spec)：同一題再一次；newRun(文字, true)：弱點練習 */
@@ -60,14 +68,15 @@ function newRun(text, drill, spec) {
   abandon();
   cancelAnimationFrame(raf);
   if (drill) spec = null;
-  else { if (!spec) { spec = randomSpec(S.cat, S.len, lastSpec); lastSpec = spec; } text = textOf(spec); }
+  else { if (!spec) { spec = randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; } text = textOf(spec); }
   R = { ty: null, specs: spec ? [spec] : [], spec0: spec, start: 0, ended: false, endT: 0, pastes: 0, ime: 0, drill: !!drill, text0: text, pb: drill ? null : store.get(pbKey(), null) };
   R.ty = new Typist(S.rule, chunkDone);
   R.ty.setText(text);
   build(); paint(); updLive();
   placeCat(me, 0); placeCat(gh, 0); gh.style.display = R.pb ? "" : "none";
   $("#res").hidden = true; box.classList.remove("end");
-  $("#hint").textContent = (isCode() ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來同一題・不能貼上" + (S.cat === "zh" ? "・用注音或其他中文輸入法打" : "");
+  const cjk = isCode() && /[\u3000-\u9fff\uff00-\uffef]/.test(text);
+  $("#hint").textContent = (isCode() ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來同一題・不能貼上" + (S.cat === "zh" ? "・用注音或其他中文輸入法打" : "") + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
   ta.value = ""; ta.focus({ preventScroll: true });
 }
 function build() {
@@ -118,7 +127,7 @@ function event(ev) {
 }
 function chunkDone(ty) {
   if (timed()) {
-    const spec = randomSpec(S.cat, S.len, lastSpec); lastSpec = spec; R.specs.push(spec);
+    const spec = randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; R.specs.push(spec);
     ty.setText(textOf(spec)); build();
     return;
   }
@@ -181,6 +190,7 @@ function finish(ms) {
   if (!R.drill && A.correct > 5 && A.acc >= 0.8 && (!R.pb || cpm > R.pb.cpm)) { isPB = !!R.pb; store.set(pbKey(), { cpm, chars: A.correct }); }
   sendRun(true);
   const T = tips(A, { cat: S.cat, rule: S.rule, pastes: R.pastes, ime: R.ime }), c = A.cls;
+  const L = R.drill ? null : learnCard(R.specs[0], S.cat, S.len);
   const chip = (l, n) => `<span class="${n ? "hot" : ""}">${l} ${n}</span>`;
   const mx = Math.max(1, ...A.seg);
   const canBoard = !R.drill && A.acc >= 0.9 && A.correct >= 20 && online;
@@ -193,6 +203,7 @@ function finish(ms) {
     ${S.cat !== "zh" ? `<div class="s"><small>字元／分</small><strong>${Math.round(cpm)}</strong></div>` : ""}</div>
    ${canBoard ? `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label><input id="nick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(store.get("mt-nick", ""))}" autocomplete="off"><button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p></form>`
       : !R.drill && online ? `<div class="submit"><p>正確率 90% 以上、打對 20 個字以上才能上排行榜。</p></div>` : ""}
+   ${L ? L.html : ""}
    <div class="cols"><div><h3>建議</h3><ul class="tips">${T.map(([b, t]) => `<li><b>${b}</b>${t}</li>`).join("") || "<li><b>很穩</b>這次沒有明顯的問題。</li>"}</ul></div>
    <div><h3>錯誤分類</h3><div class="chips">${chip("全形半形", c.width.length)}${isCode() ? chip("縮排", c.indent.length) + chip("大小寫", c.kase.length) : ""}${S.cat === "cpp" ? chip("分號", c.semi.length) : ""}${isCode() ? chip("Enter", c.enter.length) : ""}${chip("其他", c.other.length)}</div>
    ${S.cat !== "zh" ? "<h3>哪些鍵打錯</h3>" + kbHTML(A) : ""}
@@ -200,6 +211,17 @@ function finish(ms) {
    ${A.pauses.length ? `<h3 style="margin-top:16px">停最久的地方</h3><ol class="pz">${A.pauses.map((k) => `<li><code>${esc(show(k.exp))}</code> 前停了 ${(k.gap / 1000).toFixed(1)} 秒</li>`).join("")}</ol>` : ""}</div></div>
    <div class="btns"><button class="main" id="bAgain" type="button">同一題再一次</button><button id="bNew" type="button">換一題</button>${A.E.length ? '<button id="bDrill" type="button">針對弱點練習</button>' : ""}</div></div>`;
   $("#res").hidden = false;
+  if (L) {
+    const it0 = R.specs[0];
+    learnLog = { c: S.cat, l: S.len, item: it0 ? it0.i.join(",") : "", quiz: /id="quiz"/.test(L.html) ? 1 : 0, answered: 0, correct: 0, skipped: 0, opened: 0,
+      onAnswer(right) {
+        if (!right) return;
+        const n = store.get("mt-quiz-right", 0) + 1; store.set("mt-quiz-right", n);
+        me.classList.remove("hop"); void me.offsetWidth; me.classList.add("hop");
+        toast(`答對了！你已經答對 ${n} 題`);
+      } };
+    L.bind($("#res"), learnLog);
+  }
   const same = R.text0, drill = R.drill, specs = R.specs.slice(), events = R.ty.events.slice(), rule = S.rule;
   const spec0 = R.spec0;
   $("#bAgain").onclick = () => newRun(same, drill, spec0);
@@ -264,7 +286,10 @@ ta.addEventListener("beforeinput", (e) => {
 });
 ta.addEventListener("compositionstart", () => {
   composing = true;
-  if (S.cat !== "zh" && R && !R.ended) { if (!R.ime) toast("輸入法在中文模式，請切到英數"); R.ime++; }
+  // 程式題的字串裡可能有中文：下一個要打的字是中文就不提醒
+  const next = R && R.ty.text[R.ty.typed.length] || "";
+  const wantCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(next);
+  if (S.cat !== "zh" && R && !R.ended && !wantCJK) { if (!R.ime) toast("輸入法在中文模式，請切到英數"); R.ime++; }
 });
 ta.addEventListener("compositionupdate", (e) => { comp.textContent = e.data || ""; });
 ta.addEventListener("compositionend", (e) => {
@@ -286,12 +311,24 @@ box.addEventListener("touchend", () => { if (!R.ended) ta.focus({ preventScroll:
 function syncSeg() { document.querySelectorAll(".opts .seg").forEach((g) => g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", S[g.dataset.k] === b.dataset.v))); }
 document.querySelectorAll(".opts .seg").forEach((g) => g.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b || S[g.dataset.k] === b.dataset.v) return;
-  S[g.dataset.k] = b.dataset.v; store.set("mt-settings", S); syncSeg();
+  S[g.dataset.k] = b.dataset.v; store.set("mt-settings", S); syncSeg(); syncUnit();
   if (g.dataset.k === "rule" && R && !R.ty.started) { R.ty.rule = S.rule; ta.focus(); return; }
   newRun(); loadBoard();
 }));
 addEventListener("resize", () => { if (R) { paint(); updLive(); } });
-addEventListener("pagehide", abandon);
+addEventListener("pagehide", () => { abandon(); flushLearn(); });
+
+/* 單元（程式題才有） */
+const unitSel = $("#unit");
+function syncUnit() {
+  const show = isCode();
+  unitSel.closest(".grp").hidden = !show;
+  if (!show) return;
+  const units = CODE_UNITS[S.cat];
+  if (S.unit && !units.includes(S.unit)) S.unit = "";
+  unitSel.innerHTML = `<option value="">全部單元</option>` + units.map((u) => `<option${u === S.unit ? " selected" : ""}>${u}</option>`).join("");
+}
+unitSel.addEventListener("change", () => { S.unit = unitSel.value; store.set("mt-settings", S); newRun(); });
 
 /* ---------- 同意說明 ---------- */
 function showConsent() { $("#consent").hidden = false; $("#cYes").focus(); }
@@ -321,5 +358,5 @@ $("#newver").onclick = () => location.reload();
 setInterval(checkVersion, 60000);
 
 /* ---------- 開始 ---------- */
-syncSeg(); newRun(); loadBoard();
+syncSeg(); syncUnit(); newRun(); loadBoard();
 if (consent === null && online) showConsent(); else visit();

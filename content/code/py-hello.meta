@@ -1,0 +1,8 @@
+title: Hello Kitty
+unit: Basic Input and Output
+summary: 第一支 Python 程式：用 print 印出一行文字。
+input:
+wrong: 'Hello, Kitty!'
+wrong: Hello Kitty
+wrong: print('Hello, Kitty!')
+@ print('Hello, Kitty!') => print 會把括號裡的東西印出來；單引號只是用來標示「這是字串」，不會被印出來。

@@ -1,0 +1,11 @@
+title: 圓面積
+unit: Basic Input and Output
+summary: 讀入半徑，算出圓面積，用 f-string 印到小數點後 4 位。
+input: 2
+wrong: 12.566370
+wrong: 12.56637
+wrong: 12
+@ pi = 3.1415926 => Python 的變數不用先宣告型態，直接給值就好。
+@ r = input() => input() 讀進來的一定是字串，例如 '2'。
+@ r = int(r) => 用 int() 把字串轉成整數才能計算。
+@ print(f'{r*r*pi:.4f}') => f-string 裡用大括號放算式；:.4f 表示印到小數點後 4 位（會四捨五入）。

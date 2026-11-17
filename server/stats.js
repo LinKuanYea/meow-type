@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import { CATS, LENS, CAT_NAME, LEN_NAME } from "../shared/bank.js";
+import { BANK, CATS, LENS, CAT_NAME, LEN_NAME } from "../shared/bank.js";
 
 let db = null;
 const ID = /^[0-9a-f]{24}$/;
@@ -22,6 +22,8 @@ export function initStats(file) {
       backs INTEGER, pastes INTEGER, bursts INTEGER, ime INTEGER, finished INTEGER);
     CREATE TABLE IF NOT EXISTS scores (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, cid TEXT, name TEXT, cat TEXT, len TEXT, mode TEXT, rule TEXT,
       speed REAL, acc REAL, correct INTEGER, ms INTEGER, flag TEXT NOT NULL DEFAULT '');
+    CREATE TABLE IF NOT EXISTS learn (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, cid TEXT, sid TEXT, cat TEXT, len TEXT, item TEXT,
+      quiz INTEGER, answered INTEGER, correct INTEGER, skipped INTEGER, opened INTEGER);
     CREATE INDEX IF NOT EXISTS scores_board ON scores(cat, len, mode, ts);
     CREATE INDEX IF NOT EXISTS runs_ts ON runs(ts);
   `);
@@ -39,6 +41,14 @@ export function recordRun(r) {
     Date.now(), cleanId(r.cid), cleanId(r.sid), cleanDevice(r.device), r.c, r.l, r.m, r.rule,
     int(r.ms, 3600000), int(r.correct), int(r.keys), int(r.errs), num(r.acc, 0, 1) ?? 0, num(r.speed, 0, 1000) ?? 0,
     int(r.width), int(r.indent), int(r.semi), int(r.kase), int(r.enter), int(r.backs), int(r.pastes), int(r.bursts), int(r.ime), r.finished ? 1 : 0);
+}
+
+/** 「學一下」卡片的使用情形：有沒有作答預測輸出、答對、跳過、展開幾行說明 */
+export function recordLearn(r) {
+  if (!CATS.includes(r.c) || !LENS.includes(r.l)) throw new Error("學一下紀錄格式不對");
+  const item = typeof r.item === "string" && /^[0-9,]{1,60}$/.test(r.item) ? r.item : null;
+  db.prepare("INSERT INTO learn (ts,cid,sid,cat,len,item,quiz,answered,correct,skipped,opened) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    .run(Date.now(), cleanId(r.cid), cleanId(r.sid), r.c, r.l, item, r.quiz ? 1 : 0, r.answered ? 1 : 0, r.correct ? 1 : 0, r.skipped ? 1 : 0, int(r.opened, 500));
 }
 
 /* ---------- 排行榜 ---------- */
@@ -72,6 +82,7 @@ export function exportAll() {
     visits: db.prepare("SELECT * FROM visits").all(),
     runs: db.prepare("SELECT * FROM runs").all(),
     scores: db.prepare("SELECT * FROM scores").all(),
+    learn: db.prepare("SELECT * FROM learn").all(),
   };
 }
 
@@ -101,6 +112,10 @@ export function renderStatsPage() {
   const dev = q("SELECT device, COUNT(*) n FROM visits GROUP BY device ORDER BY n DESC");
   const ret = one(`SELECT COUNT(*) u, SUM(CASE WHEN days>1 THEN 1 ELSE 0 END) back FROM (SELECT cid, COUNT(DISTINCT ${dayExpr}) days FROM visits WHERE cid IS NOT NULL GROUP BY cid)`);
   const recent = q("SELECT * FROM scores ORDER BY id DESC LIMIT 40");
+  const learn = q(`SELECT cat, len, COUNT(*) n, SUM(quiz) quiz, SUM(answered) ans, SUM(correct) ok, SUM(skipped) skip,
+      AVG(opened) opened, SUM(CASE WHEN opened>0 THEN 1 ELSE 0 END) anyopen FROM learn GROUP BY cat, len ORDER BY cat, len`);
+  const hard = q(`SELECT cat, len, item, COUNT(*) n, SUM(correct) ok FROM learn WHERE answered=1 GROUP BY cat, len, item HAVING n >= 3 ORDER BY 1.0*ok/n LIMIT 10`);
+  const itemName = (c, l, item) => { const x = BANK[c]?.[l]?.[Number(String(item).split(",")[0])]; return x && typeof x === "object" ? (x.title || x.t) : esc(item); };
   const tw = (ts) => new Date(ts + TZ).toISOString().slice(5, 16).replace("T", " ");
   return `<!DOCTYPE html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喵打統計</title>
 <style>body{font:15px/1.5 system-ui,sans-serif;margin:0;padding:20px max(4vw,12px);color:#2a1d14;background:#fffaf2}h1{margin:0 0 4px}h2{margin:28px 0 8px;font-size:19px}
@@ -114,6 +129,11 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{b
 <h2>題庫 × 長度 × 模式</h2><p class="n">每局平均的錯誤次數。</p>
 <div class="wrap">${table(["題庫", "長度", "模式", "局數", "平均速度", "正確率", "平均秒數", "全形半形", "縮排", "分號", "大小寫", "倒退"],
     byCat.map((r) => [CAT_NAME[r.cat] || esc(r.cat), LEN_NAME[r.len] || esc(r.len), r.mode === "t60" ? "1 分鐘" : "打完一題", r.n, r1(r.sp), pct(r.acc), r1(r.ms / 1000), r1(r.w), r1(r.ind), r1(r.semi), r1(r.k), r1(r.b)]))}</div>
+<h2>學一下</h2><p class="n">打完後的教學卡片。「看到」＝結算畫面出現卡片的次數；程式題（句子、整段）有預測輸出，答完或跳過才看得到說明。</p>
+<div class="wrap">${table(["題庫", "長度", "看到", "有預測輸出", "作答", "答對率", "跳過", "有展開說明", "平均展開幾行"],
+    learn.map((r) => [CAT_NAME[r.cat] || esc(r.cat), LEN_NAME[r.len] || esc(r.len), r.n, r.quiz, r.ans, r.ans ? pct(r.ok / r.ans) : "—", r.skip, r.anyopen, r1(r.opened)]))}</div>
+<p class="n">答對率最低的題目（作答 3 次以上）</p>
+<div class="wrap">${table(["題目", "作答", "答對率"], hard.map((r) => [esc(itemName(r.cat, r.len, r.item)), r.n, pct(r.ok / r.n)]))}</div>
 <h2>打錯時的規則</h2><div class="wrap">${table(["規則", "局數", "正確率", "平均速度"], rules.map((r) => [RULE[r.rule] || esc(r.rule), r.n, pct(r.acc), r1(r.sp)]))}</div>
 <h2>裝置</h2><div class="wrap">${table(["裝置", "造訪"], dev.map((r) => [({ desktop: "電腦", tablet: "平板", mobile: "手機" })[r.device] || esc(r.device), r.n]))}</div>
 <h2>最近的排行榜成績</h2><div class="wrap">${table(["時間", "暱稱", "題庫", "長度", "模式", "規則", "速度", "正確率", "狀態"],

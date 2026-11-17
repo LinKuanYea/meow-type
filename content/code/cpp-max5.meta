@@ -1,0 +1,13 @@
+title: 五數最大值
+unit: Conditional Loop
+summary: 讀入五個數，用「擂台」的方式找最大值：left 是目前的擂台主，每讀一個新的數 right 就比一次，大的留在 left。
+input: 4 9 2 7 5
+wrong: 5
+wrong: 4
+wrong: 7
+@ int left, right; => left 存「目前最大的數」，right 存「剛讀進來的數」。
+@ cin >> left >> right; => 先讀前兩個數。
+@ if (left > right) { => left 比較大就什麼都不用做，所以這個大括號是空的。
+@ left = right; => right 比較大（或一樣大），就讓 right 成為新的擂台主。
+@ cin >> right; => 再讀下一個數，重複同樣的比較。
+@ cout << left; => 比完四次，left 就是五個數裡最大的。

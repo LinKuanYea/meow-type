@@ -1,0 +1,8 @@
+title: 文文的求婚--續集 (1 行版)
+unit: Selection Structure
+summary: 用一行條件判斷閏年：能被 4 整除但不能被 100 整除，或者能被 400 整除。
+input: 1900
+wrong: a leap year
+wrong: True
+wrong: a normal year\na leap year
+@ if ((year % 4 == 0) and (year % 100 != 0)) or (year % 400 == 0): => and 是「而且」、or 是「或者」、!= 是「不等於」。1900 能被 4 和 100 整除，但不能被 400 整除，所以不是閏年。

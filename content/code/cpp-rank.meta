@@ -1,0 +1,11 @@
+title: 我是第幾名
+unit: Array and Search
+summary: 讀入全班成績和自己的分數 x，數有幾個人比 x 高，名次就是「比我高的人數 + 1」；x 不在名單上就是輸入無效。
+input: 5\n70 92 85 92 60\n85
+wrong: 2
+wrong: 4
+wrong: 輸入無效
+@ int ming = 1; => 名次從第 1 名開始算。
+@ if (scores[i] > x) { => 每遇到一個比我高的人，名次就往後一名。
+@ if (scores[i] == x) { => 順便檢查 x 有沒有出現在名單上。
+@ if (found) { => 有找到 x 才印名次。

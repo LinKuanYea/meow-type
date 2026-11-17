@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { CATS, LENS, textOf } from "../shared/bank.js";
 import { RULES, replay } from "../shared/judge.js";
-import { initStats, recordVisit, recordRun, recordScore, board, exportAll, renderStatsPage, cleanId } from "./stats.js";
+import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, exportAll, renderStatsPage, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -104,6 +104,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/end") { active.delete(cleanId(body.sid)); return json(res, 204); }
     if (pathname === "/api/visit") { recordVisit(body); return json(res, 204); }
     if (pathname === "/api/run") { recordRun(body); return json(res, 204); }
+    if (pathname === "/api/learn") { recordLearn(body); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body);
   } catch (e) { console.warn(`[API] ${pathname}：${e.message}`); return json(res, 400, { error: "格式不對" }); }
   json(res, 404, { error: "沒有這個功能" });

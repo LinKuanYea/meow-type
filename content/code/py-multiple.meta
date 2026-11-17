@@ -1,0 +1,10 @@
+title: 倍數判斷
+unit: Selection Structure
+summary: 讀入 x 和 y，用取餘數判斷 x 是不是 y 的倍數。
+input: 21 7
+wrong: No
+wrong: 0
+wrong: 3
+@ x, y = input().split(' ') => 用空白切開一行輸入，分給 x 和 y（這時還是字串）。
+@ x = int(x) => 轉成整數才能做數學運算。
+@ if x % y == 0: => 餘數是 0 就是倍數。Python 的 if 後面要加冒號，下一行要縮排。

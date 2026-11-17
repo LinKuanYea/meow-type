@@ -1,0 +1,13 @@
+title: 全班成績統計
+unit: List and Iteration
+summary: 讀入 n 個成績存進 list，算出總分、平均（印到小數點後 2 位），以及高於平均的人數。
+input: 4\n60 90 75 80
+wrong: 305\n76.25\n3
+wrong: 305\n76.3\n2
+wrong: 305\n76\n2
+@ scores = list(map(int, input().split())) => 一行讀進所有成績，轉成整數後放進 list。
+@ for score in scores: => 走訪 list：score 依序是每一個成績。
+@ total = total + score => 累加總分。
+@ average = total / n => / 會得到小數。
+@ if score > average: => 再走訪一次，數有幾個人高於平均（等於平均不算）。
+@ print(f'{total}\n{average:.2f}\n{count}') => :.2f 印到小數點後 2 位。

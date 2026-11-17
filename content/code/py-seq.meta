@@ -1,0 +1,11 @@
+title: 等差數列-for版
+unit: Counting Loop
+summary: 讀入首項、第二項和項數 n，算出公差，用 for 迴圈印出數列，數字之間用逗號隔開，最後一個後面沒有逗號。
+input: 10 7 4
+wrong: 10,7,4,1,
+wrong: 10,13,16,19
+wrong: 10,7,4
+@ d = a2 - a1 => 公差可以是負的，例如 7 - 10 = -3。
+@ for i in range(n-1): => 先印前 n-1 項，每項後面都接逗號。
+@ print(a, end=',') => end=',' 讓 print 結尾印逗號而不是換行。
+@ print(a, end='') => 最後一項單獨印，後面不加逗號。

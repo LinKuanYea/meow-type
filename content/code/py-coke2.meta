@@ -1,0 +1,13 @@
+title: 肥宅快樂水（瓶子+蓋子）
+unit: Conditional Loop
+summary: 進階版：4 個空瓶換 1 瓶、每個瓶蓋退 5 元、錢夠 27 元就再買，三件事輪流做，直到都不能做為止。
+input: 54
+wrong: 2\n2\n0
+wrong: 3\n3\n19
+wrong: 2\n0\n10
+@ money %= 27 => 買完剩下的零錢。%= 是「取餘數後存回去」的簡寫。
+@ while (bottle >= 4) or (cap > 0) or (money >= 27): => 三件事只要有一件還能做就繼續。
+@ if bottle >= 4: => 空瓶換一瓶，喝完多一個瓶子和瓶蓋。
+@ if cap > 0: => 瓶蓋全部退錢。
+@ if money >= 27: => 錢夠就買一瓶。
+@ print(f'{coke}\n{bottle}\n{money}') => \n 是換行，所以會印成三行。
