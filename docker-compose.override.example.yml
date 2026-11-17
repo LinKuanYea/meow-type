@@ -1,0 +1,12 @@
+# 只有「cloudflared 也跑在 Docker 裡」才需要這個檔案。
+# 用法：複製成 docker-compose.override.yml，把 cloudflared_net 改成你 cloudflared 容器所在的網路名稱
+#       （用 docker network ls 查），Tunnel 的服務位址填 http://meow-type:8080。
+# 這樣完全不佔用主機的 port。
+services:
+  meow-type:
+    ports: !reset []
+    networks:
+      - cloudflared_net
+networks:
+  cloudflared_net:
+    external: true

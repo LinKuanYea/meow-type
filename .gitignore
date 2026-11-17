@@ -1,0 +1,6 @@
+node_modules/
+.env
+.last-failed-commit
+.deferred-commit
+docker-compose.override.yml
+data/

@@ -1,0 +1,36 @@
+services:
+  meow-type:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+        APP_BUILT: ${APP_BUILT:-}
+    image: meow-type:latest
+    container_name: meow-type
+    restart: unless-stopped
+    # 只綁在本機 127.0.0.1，外面連不到；對外由 Cloudflare Tunnel 轉進來
+    ports:
+      - "127.0.0.1:${HOST_PORT:-38218}:8080"
+    environment:
+      - STATS_PASSWORD=${STATS_PASSWORD:-}
+      - RATE_PER_MIN=${RATE_PER_MIN:-1500}
+    volumes:
+      - meow-type-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  meow-type-data:
+    name: meow-type-data
