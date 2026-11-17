@@ -158,6 +158,8 @@ try {
   eq((await postJ("/api/run", { c: "xx" })).status, 400, "格式不對的練習紀錄");
   eq((await postJ("/api/learn", { cid, sid, c: "cpp", l: "para", item: "3", quiz: 1, answered: 1, correct: 1, opened: 2 })).status, 204, "記錄學一下");
   eq((await postJ("/api/learn", { c: "cpp", l: "x" })).status, 400, "格式不對的學一下紀錄");
+  eq((await postJ("/api/client-error", { msg: "測試", ua: "x" })).status, 204, "前端錯誤回報");
+  ok((await get("/boot.js")).status === 200, "開機檢查程式");
   ok((await get("/learn.js")).status === 200 && (await get("/shared/bank-code.js")).status === 200, "學一下與程式題庫");
 
   const spec = { c: "cpp", l: "para", i: [1] }, text = textOf(spec);

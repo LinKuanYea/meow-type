@@ -94,11 +94,11 @@ export function drillText(A, cat) {
     return lines.sort((x, y) => score(y) - score(x)).slice(0, 6).join("\n");
   }
   if (cat === "en") {
-    const sents = [...b.sent, ...b.para.flatMap((p) => p.split(/(?<=\.) /))];
+    const sents = [...b.sent, ...b.para.flatMap((p) => p.replace(/\. /g, ".\n").split("\n"))];
     const score = (s) => [...s].filter((ch) => errs.includes(baseKey(ch))).length / s.length;
     return sents.sort((x, y) => score(y) - score(x)).slice(0, 3).join(" ");
   }
-  const sents = [...b.sent, ...b.para.flatMap((p) => p.split(/(?<=。)/))];
+  const sents = [...b.sent, ...b.para.flatMap((p) => p.replace(/。/g, "。\n").split("\n").filter(Boolean))];
   const score = (s) => [...s].filter((ch) => errs.includes(ch)).length;
   return sents.sort((x, y) => score(y) - score(x)).slice(0, 3).join("");
 }

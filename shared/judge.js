@@ -100,7 +100,8 @@ export class Typist {
     if (this.rule === "block" || !this.typed.length) return;
     this.backs++; this.last = t;
     const T = this.typed;
-    if (word) { while (T.length && /\s/.test(T.at(-1))) T.pop(); while (T.length && !/\s/.test(T.at(-1))) T.pop(); }
+    const last = () => T[T.length - 1];
+    if (word) { while (T.length && /\s/.test(last())) T.pop(); while (T.length && !/\s/.test(last())) T.pop(); }
     else T.pop();
   }
 }

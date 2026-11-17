@@ -360,3 +360,4 @@ setInterval(checkVersion, 60000);
 /* ---------- 開始 ---------- */
 syncSeg(); syncUnit(); newRun(); loadBoard();
 if (consent === null && online) showConsent(); else visit();
+window.__mtReady = true;

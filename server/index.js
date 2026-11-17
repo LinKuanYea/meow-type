@@ -84,6 +84,8 @@ export const server = http.createServer(async (req, res) => {
 
 /* ---------- API ---------- */
 const rate = new Map();
+let clientErrs = 0; // 每分鐘最多記 60 筆前端錯誤
+setInterval(() => { clientErrs = 0; }, 60000).unref();
 setInterval(() => rate.clear(), 60000).unref();
 function clientIp(req) { return String(req.headers["cf-connecting-ip"] || req.socket.remoteAddress || ""); } // 只用來限流，不儲存
 function rateOk(req) { const ip = clientIp(req), n = (rate.get(ip) || 0) + 1; rate.set(ip, n); return n <= RATE_PER_MIN; }
@@ -106,6 +108,11 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/run") { recordRun(body); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body);
+    if (pathname === "/api/client-error") {
+      const clip = (x, n) => String(x ?? "").replace(/[\u0000-\u001f]/g, " ").slice(0, n);
+      if (clientErrs++ < 60) console.warn(`[前端錯誤] v=${clip(body.v, 12)} ${clip(body.msg, 300)} ｜ ${clip(body.ua, 200)}`);
+      return json(res, 204);
+    }
   } catch (e) { console.warn(`[API] ${pathname}：${e.message}`); return json(res, 400, { error: "格式不對" }); }
   json(res, 404, { error: "沒有這個功能" });
 }
