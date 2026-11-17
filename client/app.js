@@ -69,11 +69,16 @@ function newRun(text, drill, spec) {
   cancelAnimationFrame(raf);
   if (drill) spec = null;
   else { if (!spec) { spec = randomSpec(S.cat, S.len, lastSpec, Math.random, isCode() ? S.unit : ""); lastSpec = spec; } text = textOf(spec); }
-  R = { ty: null, specs: spec ? [spec] : [], spec0: spec, start: 0, ended: false, endT: 0, pastes: 0, ime: 0, drill: !!drill, text0: text, pb: drill ? null : store.get(pbKey(), null) };
+  R = { ty: null, specs: spec ? [spec] : [], spec0: spec, start: 0, ended: false, endT: 0, pastes: 0, ime: 0, drill: !!drill, text0: text, pb: drill ? null : store.get(pbKey(), null), rival: drill ? null : rival };
+  // 灰貓：挑戰對手的速度，沒有的話用這台電腦的最佳紀錄。速度換算成每分鐘打對幾個字元（WPM × 5）
+  R.ghost = R.rival ? { cpm: R.rival.c === "zh" ? R.rival.speed : R.rival.speed * 5 } : R.pb;
+  if (R.ghost && !R.ghost.chars) R.ghost.chars = R.ghost.cpm;
   R.ty = new Typist(S.rule, chunkDone);
   R.ty.setText(text);
   build(); paint(); updLive();
-  placeCat(me, 0); placeCat(gh, 0); gh.style.display = R.pb ? "" : "none";
+  placeCat(me, 0); placeCat(gh, 0); gh.style.display = R.ghost ? "" : "none";
+  gh.querySelector("span").textContent = R.rival ? (R.rival.me ? "你的紀錄" : R.rival.name) : "最佳紀錄";
+  rivalBar();
   $("#res").hidden = true; box.classList.remove("end");
   const cjk = isCode() && /[\u3000-\u9fff\uff00-\uffef]/.test(text);
   $("#hint").textContent = (isCode() ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來同一題・不能貼上" + (S.cat === "zh" ? "・用注音或其他中文輸入法打" : "") + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
@@ -137,7 +142,7 @@ function chunkDone(ty) {
 /* ---------- 計時與即時數字 ---------- */
 const elapsed = () => (R.start ? (R.ended ? R.ms : now() - R.start) : 0);
 function goal() {
-  if (timed()) return Math.max(R.pb ? R.pb.chars * 1.1 : S.cat === "zh" ? 50 : 180, R.ty.totalCorrect() + 1);
+  if (timed()) return Math.max(R.ghost ? R.ghost.chars * 1.1 : S.cat === "zh" ? 50 : 180, R.ty.totalCorrect() + 1);
   return R.ty.text.length;
 }
 function updLive() {
@@ -149,7 +154,7 @@ function updLive() {
   $("#lt0").textContent = timed() ? "剩下（秒）" : "時間（秒）";
   $("#lt").textContent = timed() ? Math.max(0, 60 - ms / 1000).toFixed(1) : (ms / 1000).toFixed(1);
   placeCat(me, c / goal());
-  if (R.pb) placeCat(gh, timed() ? ((ms / 60000) * R.pb.chars) / goal() : (R.pb.cpm * ms) / 60000 / R.ty.text.length);
+  if (R.ghost) placeCat(gh, timed() ? ((ms / 60000) * R.ghost.chars) / goal() : (R.ghost.cpm * ms) / 60000 / R.ty.text.length);
 }
 function loop() {
   raf = requestAnimationFrame(() => {
@@ -196,6 +201,8 @@ function finish(ms) {
   const canBoard = !R.drill && A.acc >= 0.9 && A.correct >= 20 && online;
   $("#res").innerHTML = `<div class="res">
    <h2>${R.drill ? "弱點練習結果" : "這次的成績"} ${isPB ? '<span class="pb">新紀錄</span>' : ""}</h2>
+   ${R.rival ? `<p class="vs ${sp > R.rival.speed ? "win" : ""}">${sp > R.rival.speed ? `${R.rival.me ? "你超越了自己的紀錄" : `你贏了 ${esc(R.rival.name)}`}！（${Math.round(sp)} 比 ${Math.round(R.rival.speed)}）`
+      : `還差 ${Math.max(1, Math.ceil(R.rival.speed - sp))} ${unitOf(S.cat)} 就追上${R.rival.me ? "自己的紀錄" : ` ${esc(R.rival.name)}`}，再試一次！`}</p>` : ""}
    <div class="big"><div><small>速度（${unitOf(S.cat)}）</small><strong>${Math.round(sp)}</strong></div>
     <div class="s"><small>正確率</small><strong>${Math.round(A.acc * 100)}%</strong></div>
     <div class="s"><small>時間</small><strong>${(ms / 1000).toFixed(1)} 秒</strong></div>
@@ -247,20 +254,60 @@ function ensureCid() { if (!CID) { CID = rid(); store.set("mt-cid", CID); } retu
 
 /* ---------- 排行榜 ---------- */
 let per = store.get("mt-board-per", "day");
+let scope = store.get("mt-board-scope", "mine"); // mine＝目前的設定；all＝所有排行
+const RN = { block: "擋下", back: "倒退修", free: "帶錯" };
+const setName = (c, l, m) => `${CAT_NAME[c]}・${LEN_NAME[l]}・${m === "t60" ? "1 分鐘" : "打完一題"}`;
+let boardRows = []; // 給「挑戰他」按鈕用
+function boardTable(rows, c, l, m) {
+  return `<table class="lb"><thead><tr><th>名次</th><th>暱稱</th><th class="n">速度（${unitOf(c)}）</th><th class="n">正確率</th><th>打錯時</th><th><span class="sr">挑戰</span></th></tr></thead><tbody>${rows.map((r, i) => {
+    const k = boardRows.push({ ...r, c, l, m }) - 1;
+    return `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}${r.me ? "（你）" : ""}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td><td>${RN[r.rule] || ""}</td>`
+      + `<td class="ch"><button type="button" class="chal" data-k="${k}">${r.me ? "挑戰自己" : "挑戰他"}</button></td></tr>`;
+  }).join("")}</tbody></table>`;
+}
 async function loadBoard() {
-  $("#bset").textContent = `${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}（${unitOf(S.cat)}）`;
   document.querySelectorAll("#bper button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === per));
+  document.querySelectorAll("#bscope button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === scope));
+  $("#bset").textContent = scope === "all" ? "每種設定的前 5 名" : `${setName(S.cat, S.len, S.mode)}（${unitOf(S.cat)}）`;
   if (!online) { $("#blist").innerHTML = '<p class="empty">要連上伺服器才看得到排行榜。</p>'; return; }
-  const q = new URLSearchParams({ c: S.cat, l: S.len, m: S.mode, p: per, me: CID || "" });
-  let rows = null;
-  try { rows = await (await fetch("/api/board?" + q)).json(); } catch {}
-  if (!Array.isArray(rows)) { $("#blist").innerHTML = '<p class="empty">排行榜暫時讀不到。</p>'; return; }
-  if (!rows.length) { $("#blist").innerHTML = '<p class="empty">還沒有人上榜，第一名就是你的。</p>'; return; }
-  const RN = { block: "擋下", back: "倒退修", free: "帶錯" };
-  $("#blist").innerHTML = `<table class="lb"><thead><tr><th>名次</th><th>暱稱</th><th class="n">速度</th><th class="n">正確率</th><th>打錯時</th></tr></thead><tbody>${rows.map((r, i) =>
-    `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td><td>${RN[r.rule] || ""}</td></tr>`).join("")}</tbody></table>`;
+  boardRows = [];
+  try {
+    if (scope === "all") {
+      const groups = await (await fetch("/api/boards?" + new URLSearchParams({ p: per, me: CID || "" }))).json();
+      if (!Array.isArray(groups)) throw 0;
+      $("#blist").innerHTML = groups.length ? groups.map((g) => `<h3 class="bg">${setName(g.c, g.l, g.m)}</h3>${boardTable(g.rows, g.c, g.l, g.m)}`).join("")
+        : '<p class="empty">這段時間還沒有人上榜。</p>';
+    } else {
+      const rows = await (await fetch("/api/board?" + new URLSearchParams({ c: S.cat, l: S.len, m: S.mode, p: per, me: CID || "" }))).json();
+      if (!Array.isArray(rows)) throw 0;
+      $("#blist").innerHTML = rows.length ? boardTable(rows, S.cat, S.len, S.mode) : '<p class="empty">還沒有人上榜，第一名就是你的。</p>';
+    }
+  } catch { $("#blist").innerHTML = '<p class="empty">排行榜暫時讀不到。</p>'; }
 }
 $("#bper").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; per = b.dataset.v; store.set("mt-board-per", per); loadBoard(); });
+$("#bscope").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; scope = b.dataset.v; store.set("mt-board-scope", scope); loadBoard(); });
+$("#blist").addEventListener("click", (e) => {
+  const b = e.target.closest(".chal"); if (!b) return;
+  const r = boardRows[+b.dataset.k]; if (!r) return;
+  challenge(r);
+});
+
+/* ---------- 挑戰：用跟對方一樣的設定打，跑道上的灰貓換成對方的速度 ---------- */
+let rival = null; // { name, speed, c, l, m, rule }
+function challenge(r) {
+  Object.assign(S, { cat: r.c, len: r.l, mode: r.m, rule: r.rule, unit: "" });
+  store.set("mt-settings", S); syncSeg(); syncUnit();
+  rival = { name: r.name, speed: r.speed, me: r.me, c: r.c, l: r.l, m: r.m };
+  newRun(); loadBoard();
+  scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+function rivalBar() {
+  const bar = $("#rival");
+  if (!rival) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.querySelector("span").textContent = `${rival.me ? "挑戰自己的紀錄" : `挑戰 ${rival.name}`}：${Math.round(rival.speed)} ${unitOf(rival.c)}・${setName(rival.c, rival.l, rival.m)}・打錯時${RN[S.rule]}`;
+}
+$("#rivalOff").addEventListener("click", () => { rival = null; newRun(); });
 
 /* ---------- 輸入事件 ---------- */
 let tt;
@@ -312,6 +359,7 @@ function syncSeg() { document.querySelectorAll(".opts .seg").forEach((g) => g.qu
 document.querySelectorAll(".opts .seg").forEach((g) => g.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b || S[g.dataset.k] === b.dataset.v) return;
   S[g.dataset.k] = b.dataset.v; store.set("mt-settings", S); syncSeg(); syncUnit();
+  rival = null;
   if (g.dataset.k === "rule" && R && !R.ty.started) { R.ty.rule = S.rule; ta.focus(); return; }
   newRun(); loadBoard();
 }));
@@ -328,7 +376,7 @@ function syncUnit() {
   if (S.unit && !units.includes(S.unit)) S.unit = "";
   unitSel.innerHTML = `<option value="">全部單元</option>` + units.map((u) => `<option${u === S.unit ? " selected" : ""}>${u}</option>`).join("");
 }
-unitSel.addEventListener("change", () => { S.unit = unitSel.value; store.set("mt-settings", S); newRun(); });
+unitSel.addEventListener("change", () => { S.unit = unitSel.value; store.set("mt-settings", S); rival = null; newRun(); });
 
 /* ---------- 同意說明 ---------- */
 function showConsent() { $("#consent").hidden = false; $("#cYes").focus(); }

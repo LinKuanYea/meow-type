@@ -28,6 +28,7 @@
       <button data-v="block" title="打錯的字不會出現，要打對才前進">擋下</button><button data-v="back" title="錯字留著，要倒退刪掉才能繼續">要倒退修</button><button data-v="free" title="錯了照樣往前，只算打對的字">可以帶錯</button></div></div>
   </div>
 
+  <div class="rival" id="rival" hidden><span></span><button type="button" class="link" id="rivalOff">不挑戰了</button></div>
   <div class="track" id="track">
     <div class="flag"></div>
     <div class="cat ghost" id="ghost"><span>最佳紀錄</span></div>
@@ -54,7 +55,8 @@
   <section class="band2">
     <div class="board">
       <div class="bh"><div><h2>排行榜</h2><small id="bset"></small></div>
-        <div class="seg" id="bper"><button data-v="day">今天</button><button data-v="week">本週</button><button data-v="all">全部</button></div></div>
+        <div class="bctl"><div class="seg" id="bscope"><button data-v="mine">目前設定</button><button data-v="all">所有排行</button></div>
+        <div class="seg" id="bper"><button data-v="day">今天</button><button data-v="week">本週</button><button data-v="all">全部</button></div></div></div>
       <div id="blist"><p class="empty">載入中…</p></div>
     </div>
   </section>

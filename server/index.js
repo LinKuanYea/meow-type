@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { CATS, LENS, textOf } from "../shared/bank.js";
 import { RULES, replay } from "../shared/judge.js";
-import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, exportAll, renderStatsPage, cleanId } from "./stats.js";
+import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, boards, exportAll, renderStatsPage, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -60,6 +60,10 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(res, url.searchParams);
+    if (url.pathname === "/api/boards") {
+      const p = ["day", "week", "all"].includes(url.searchParams.get("p")) ? url.searchParams.get("p") : "day";
+      return json(res, 200, boards(p, cleanId(url.searchParams.get("me"))));
+    }
     if (url.pathname === "/stats" || url.pathname === "/stats/export.json") return handleStats(req, res, url.pathname);
     if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
     if (url.pathname === "/version") return json(res, 200, { version: APP_VERSION, label: VERSION_LABEL });

@@ -178,6 +178,8 @@ try {
   const s2 = await (await postJ("/api/score", { ...body, events: slower, speed: replay({ texts: [text], rule: "back", cat: "cpp", events: slower }).sum.speed })).json();
   ok(s2.ok && s2.rank === null, "比之前慢：收下但不更新名次");
   eq((await (await get(`/api/board?c=cpp&l=para&m=full&p=day`)).json()).length, 1, "每人只留最好的一次");
+  const all = await (await get(`/api/boards?p=all&me=${cid}`)).json();
+  ok(all.length === 1 && all[0].c === "cpp" && all[0].l === "para" && all[0].m === "full" && all[0].rows[0].me && !("cid" in all[0].rows[0]) && !("id" in all[0].rows[0]), "所有排行");
   const bot = human([text], { gap: [3, 6], errRate: 0 }).evs;
   const s3 = await (await postJ("/api/score", { ...body, cid: "c".repeat(24), name: "機器人", events: bot, speed: replay({ texts: [text], rule: "back", cat: "cpp", events: bot }).sum.speed })).json();
   ok(s3.ok && s3.flagged, "機器人成績：標成可疑");

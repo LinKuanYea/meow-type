@@ -165,3 +165,18 @@ dl.vocab dd small{display:block;color:var(--todo);font-size:13px}
 .cat.hop svg{animation:hop .6s}
 @keyframes hop{30%{transform:translateY(-26px)}60%{transform:translateY(0)}75%{transform:translateY(-8px)}}
 @media(prefers-reduced-motion:reduce){.cat.hop svg{animation:none}}
+/* ---------- 所有排行、挑戰 ---------- */
+.bctl{display:flex;flex-wrap:wrap;gap:8px}
+h3.bg{font-size:16px;margin:18px 0 4px}
+.lb td.ch{text-align:right;width:1%;white-space:nowrap}
+.chal{font:inherit;font-size:14px;font-weight:700;min-height:36px;padding:0 12px;border-radius:9px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer}
+.chal:hover{background:var(--gin);color:#fff}
+.chal:focus-visible{outline:3px solid var(--gin);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.rival{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;background:var(--gin);color:#fff;border-radius:12px 12px 0 0;padding:4px 14px;font-weight:700;font-size:14px}
+.rival[hidden]{display:none}
+.rival .link{color:#fff}
+.rival:not([hidden])+.track{border-top-left-radius:0;border-top-right-radius:0}
+p.vs{margin:-4px 0 12px;font-weight:700;font-size:17px}
+p.vs.win{color:var(--grass)}
+@media(max-width:600px){.lb th:nth-child(5),.lb td:nth-child(5){display:none}}

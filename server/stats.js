@@ -66,6 +66,12 @@ export function board(c, l, m, p, me, limit = 20) {
     .all(c, l, m, periodStart(p), limit);
   return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, me: !!me && r.cid === me, id: r.id }));
 }
+/** 所有設定的排行榜：每種「題庫×長度×模式」的前幾名（依題庫、長度、模式排序） */
+export function boards(p, me, limit = 5) {
+  const combos = db.prepare("SELECT DISTINCT cat, len, mode FROM scores WHERE flag='' AND ts>=?").all(periodStart(p));
+  const ord = (r) => CATS.indexOf(r.cat) * 100 + LENS.indexOf(r.len) * 10 + (r.mode === "t60" ? 1 : 0);
+  return combos.sort((a, b) => ord(a) - ord(b)).map((r) => ({ c: r.cat, l: r.len, m: r.mode, rows: board(r.cat, r.len, r.mode, p, me, limit).map(({ id, ...x }) => x) }));
+}
 /** 存一筆成績；回傳今天的名次（這次比之前好才有名次） */
 export function recordScore(s) {
   const info = db.prepare("INSERT INTO scores (ts,cid,name,cat,len,mode,rule,speed,acc,correct,ms,flag) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
