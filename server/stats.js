@@ -31,6 +31,8 @@ export function initStats(file) {
     CREATE INDEX IF NOT EXISTS scores_board ON scores(cat, len, mode, ts);
     CREATE INDEX IF NOT EXISTS runs_ts ON runs(ts);
   `);
+  // v0.5：排行榜存題目，「挑戰他」才能打同一題（舊資料沒有，挑戰時改成隨機出題）
+  if (!db.prepare("PRAGMA table_info(scores)").all().some((c) => c.name === "specs")) db.exec("ALTER TABLE scores ADD COLUMN specs TEXT");
 }
 
 export function recordVisit(v) {
@@ -89,11 +91,12 @@ export function periodStart(p, now = Date.now()) {
   return day - TZ;
 }
 export function board(c, l, m, p, me, limit = 20) {
-  const rows = db.prepare(`SELECT name, speed, acc, rule, cid, ts, id FROM (
+  const rows = db.prepare(`SELECT name, speed, acc, rule, cid, ts, id, specs FROM (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY cid ORDER BY speed DESC, ts ASC) rn FROM scores
       WHERE cat=? AND len=? AND mode=? AND flag='' AND ts>=?) WHERE rn=1 ORDER BY speed DESC, ts ASC LIMIT ?`)
     .all(c, l, m, periodStart(p), limit);
-  return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, me: !!me && r.cid === me, id: r.id }));
+  const parse = (x) => { try { return x ? JSON.parse(x) : null; } catch { return null; } };
+  return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, me: !!me && r.cid === me, id: r.id, specs: parse(r.specs) }));
 }
 /** 所有設定的排行榜：每種「題庫×長度×模式」的前幾名（依題庫、長度、模式排序） */
 export function boards(p, me, limit = 5) {
@@ -103,8 +106,8 @@ export function boards(p, me, limit = 5) {
 }
 /** 存一筆成績；回傳今天的名次（這次比之前好才有名次） */
 export function recordScore(s) {
-  const info = db.prepare("INSERT INTO scores (ts,cid,name,cat,len,mode,rule,speed,acc,correct,ms,flag) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(Date.now(), s.cid, s.name, s.c, s.l, s.m, s.rule, s.speed, s.acc, s.correct, s.ms, s.flag || "");
+  const info = db.prepare("INSERT INTO scores (ts,cid,name,cat,len,mode,rule,speed,acc,correct,ms,flag,specs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(Date.now(), s.cid, s.name, s.c, s.l, s.m, s.rule, s.speed, s.acc, s.correct, s.ms, s.flag || "", s.specs ? JSON.stringify(s.specs) : null);
   if (s.flag) return { rank: null };
   const day = board(s.c, s.l, s.m, "day", s.cid, 1000);
   const i = day.findIndex((r) => r.id === Number(info.lastInsertRowid));

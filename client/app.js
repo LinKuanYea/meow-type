@@ -301,8 +301,11 @@ let rival = null; // { name, speed, c, l, m, rule }
 function challenge(r) {
   Object.assign(S, { cat: r.c, len: r.l, mode: r.m, rule: r.rule, unit: "" });
   store.set("mt-settings", S); syncSeg(); syncUnit();
-  rival = { name: r.name, speed: r.speed, me: r.me, c: r.c, l: r.l, m: r.m };
-  newRun(); loadBoard();
+  // 有存題目就打對方那一題（1 分鐘模式照對方的題目順序）；舊成績沒存題目就隨機出
+  const specs = Array.isArray(r.specs) && r.specs.length && r.specs.every((x) => x && x.c === r.c && x.l === r.l && textOf(x)) ? r.specs : null;
+  rival = { name: r.name, speed: r.speed, me: r.me, c: r.c, l: r.l, m: r.m, specs };
+  if (specs) newRun(null, false, { ...specs[0] }); else newRun();
+  loadBoard();
   scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
 function rivalBar() {

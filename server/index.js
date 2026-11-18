@@ -179,7 +179,7 @@ function handleScore(res, b) {
   const v = verifyRun(b, { minAcc: 0.9, minCorrect: 20, what: "上排行榜" });
   if (v.error) return json(res, 400, { error: v.error });
   const s = v.sum, flags = v.flags;
-  const out = recordScore({ cid: v.cid, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
+  const out = recordScore({ cid: v.cid, name: v.name, specs: v.specs, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
   if (flags.length) console.warn(`[排行榜] 可疑成績（${flags.join(",")}）：${b.c}/${b.l}/${b.m} ${s.speed.toFixed(1)}`);
   json(res, 200, { ok: true, flagged: flags.length > 0, rank: out.rank, speed: s.speed, acc: s.acc });
 }

@@ -175,6 +175,7 @@ try {
   ok(s1.ok && !s1.flagged && s1.rank === 1, "送出成績：上榜第 1 名 " + JSON.stringify(s1));
   const b1 = await (await get(`/api/board?c=cpp&l=para&m=full&p=day&me=${cid}`)).json();
   ok(b1.length === 1 && b1[0].name === "小橘" && b1[0].me === true && !("cid" in b1[0]), "排行榜看得到，而且不外流編號");
+  ok(JSON.stringify(b1[0].specs) === JSON.stringify([spec]), "排行榜存了題目（挑戰時打同一題）");
   const slower = human([text], { seed: 11, gap: [200, 400] }).evs;
   const s2 = await (await postJ("/api/score", { ...body, events: slower, speed: replay({ texts: [text], rule: "back", cat: "cpp", events: slower }).sum.speed })).json();
   ok(s2.ok && s2.rank === null, "比之前慢：收下但不更新名次");
