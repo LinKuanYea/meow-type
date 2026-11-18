@@ -59,11 +59,11 @@ export async function drawResultImage(d) {
 }
 
 /** 結算畫面的「炫耀一下」區塊 */
-export function shareCard({ can, reason, nick }) {
+export function shareCard({ can, reason, nick, hint = "" }) {
   if (!can) return `<section class="brag"><h3>炫耀一下</h3><p class="hint">${esc(reason)}</p></section>`;
   return `<section class="brag" id="brag"><h3>炫耀一下</h3>
     <p>產生成績圖片和挑戰連結傳給朋友，他打開連結就能打同一題、跟你的速度比賽。</p>
-    <form class="submit" id="shareForm"><label for="snick"><b>暱稱</b></label><input id="snick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(nick)}" autocomplete="off"><button class="main" type="submit">產生挑戰連結</button><p id="shareMsg">連結任何人都打得開，會顯示你的暱稱和成績。</p></form>
+    <form class="submit" id="shareForm"><label for="snick"><b>暱稱</b></label><input id="snick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(nick)}" autocomplete="off"><button class="main" type="submit">產生挑戰連結</button><p id="shareMsg">連結任何人都打得開，會顯示你的暱稱和成績。</p>${hint}</form>
     <div class="shareout" id="shareOut" hidden>
       <img id="shareImg" alt="成績圖片">
       <div class="sharebtns"><input id="shareUrl" readonly aria-label="挑戰連結">

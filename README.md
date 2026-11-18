@@ -57,6 +57,25 @@ python3 scripts/build-code-bank.py   # 需要 g++ 與 python3；會實際執行�
 - 按鍵紀錄驗算完就丟掉，資料庫只存暱稱、成績和一個隨機編號。
 - 擋不了所有外掛（例如模擬真人節奏的程式），但一般的貼上、自動打字都會被抓到。
 
+## Google 登入（選填）
+
+不登入也能玩、上排行榜、分享。登入後：排行榜上標 ✓、同一個帳號換電腦也算同一個人、「我的紀錄」（`/me`，只有本人看得到）有速度變化、各設定成績、常犯的錯、最近的練習、分享的挑戰。
+登入前的匿名紀錄不會併進帳號。
+
+做法：伺服器端 OAuth（authorization code），只要 `openid email` 兩個範圍，不載入 Google 的 JavaScript。
+資料庫存 Google 帳號編號（sub）、email、暱稱，不存姓名；session 是隨機字串，資料庫只存雜湊值，cookie 是 HttpOnly。
+喵系列每個專案各自登入，但都用 Google 的 sub 當使用者編號，以後要串起來對得上。
+
+### 設定
+
+1. Google Cloud Console → Google Auth Platform：
+   - 對象（Audience）選「外部」（External），發布狀態設成「正式版」（In production）。只用 openid、email 不需要送 Google 審查。
+   - 用戶端 → 建立「網頁應用程式」，已授權的重新導向 URI 填 `https://meow-type.otlab.org/auth/google/callback`。
+2. 伺服器 `.env` 加上 `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`PUBLIC_URL=https://meow-type.otlab.org`，跑 `./scripts/deploy.sh`。
+3. 三個都設定才會出現登入按鈕；沒設定時網頁跟原本一樣。
+
+學校帳號（Google Workspace for Education）：未滿 18 歲的學生只能登入管理員設定過的應用程式。用戶端如果建在學校的 Google Cloud 機構底下，跟 MeowJudge 一樣不用另外設定；建在個人帳號底下的話，要在學校管理控制台（安全性 → 存取權與資料控管 → API 控制項）把這個用戶端設成信任。
+
 ## 本機試玩（需要 Node 24.22.1 以上）
 
 ```bash

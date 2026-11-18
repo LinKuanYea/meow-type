@@ -1,6 +1,7 @@
 // 喵打：前端
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
+import { ME, loadMe, onLogin, loginHint } from "/account.js";
 import { catSVG } from "/cat.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
@@ -204,9 +205,9 @@ function finish(ms) {
     <div class="s"><small>時間</small><strong>${(ms / 1000).toFixed(1)} 秒</strong></div>
     <div class="s"><small>打對的字</small><strong>${A.correct}</strong></div>
     ${S.cat !== "zh" ? `<div class="s"><small>字元／分</small><strong>${Math.round(cpm)}</strong></div>` : ""}</div>
-   ${canBoard ? `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label><input id="nick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(store.get("mt-nick", ""))}" autocomplete="off"><button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p></form>`
+   ${canBoard ? `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label><input id="nick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(ME.user?.nick || store.get("mt-nick", ""))}" autocomplete="off"><button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p>${loginHint()}</form>`
       : !R.drill && online ? `<div class="submit"><p>正確率 90% 以上、打對 20 個字以上才能上排行榜。</p></div>` : ""}
-   ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? { can: true, nick: store.get("mt-nick", "") } : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
+   ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? { can: true, nick: ME.user?.nick || store.get("mt-nick", ""), hint: loginHint() } : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
    ${L ? L.html : ""}
    <div class="cols"><div><h3>建議</h3><ul class="tips">${T.map(([b, t]) => `<li><b>${b}</b>${t}</li>`).join("") || "<li><b>很穩</b>這次沒有明顯的問題。</li>"}</ul></div>
    <div><h3>錯誤分類</h3><div class="chips">${chip("全形半形", c.width.length)}${isCode() ? chip("縮排", c.indent.length) + chip("大小寫", c.kase.length) : ""}${S.cat === "cpp" ? chip("分號", c.semi.length) : ""}${isCode() ? chip("Enter", c.enter.length) : ""}${chip("其他", c.other.length)}</div>
@@ -265,7 +266,7 @@ let boardRows = []; // 給「挑戰他」按鈕用
 function boardTable(rows, c, l, m) {
   return `<table class="lb"><thead><tr><th>名次</th><th>暱稱</th><th class="n">速度（${unitOf(c)}）</th><th class="n">正確率</th><th>打錯時</th><th><span class="sr">挑戰</span></th></tr></thead><tbody>${rows.map((r, i) => {
     const k = boardRows.push({ ...r, c, l, m }) - 1;
-    return `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}${r.me ? "（你）" : ""}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td><td>${RN[r.rule] || ""}</td>`
+    return `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}${r.login ? ' <span class="okb" title="已用 Google 登入">✓</span>' : ""}${r.me ? "（你）" : ""}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td><td>${RN[r.rule] || ""}</td>`
       + `<td class="ch"><button type="button" class="chal" data-k="${k}">${r.me ? "挑戰自己" : "挑戰他"}</button></td></tr>`;
   }).join("")}</tbody></table>`;
 }
@@ -443,5 +444,13 @@ setInterval(checkVersion, 60000);
 
 /* ---------- 開始 ---------- */
 syncSeg(); syncUnit(); newRun(); loadBoard();
+loadMe().then(loadBoard);
+// 登入或登出後：排行榜的「你」要重新判斷，結算畫面的登入提示拿掉、暱稱帶入
+onLogin(() => {
+  loadBoard();
+  document.querySelectorAll(".loginhint").forEach((x) => x.remove());
+  for (const id of ["#nick", "#snick"]) { const el = $(id); if (el && ME.user?.nick && !el.value) el.value = ME.user.nick; }
+  if (ME.user) toast("登入了！之後的練習會記在「我的紀錄」");
+});
 if (consent === null && online) showConsent(); else { visit(); openChallenge(); }
 window.__mtReady = true;

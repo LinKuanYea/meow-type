@@ -192,3 +192,11 @@ p.vs.win{color:var(--grass)}
 .sharebtns button,.sharebtns a{font:inherit;font-weight:700;min-height:44px;padding:0 16px;border-radius:12px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
 .sharebtns button[hidden]{display:none}
 #chalBody p{margin:0 0 12px}
+/* ---------- 登入 ---------- */
+.acct[hidden]{display:none}
+.acctbtn{font:inherit;font-weight:700;font-size:15px;min-height:42px;padding:0 16px;border-radius:12px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
+.acctbtn:hover{background:var(--gin);color:#fff}
+.okb{color:var(--grass);font-weight:700}
+.loginhint{flex-basis:100%;margin:0;font-size:14px;color:var(--todo)}
+.loginhint .link{font-size:14px;font-weight:700}
+.fig{position:relative}.fig>svg{position:absolute;inset:0;width:100%;height:100%}

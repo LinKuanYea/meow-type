@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
-import { initStats, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, exportAll, renderStatsPage, cleanId } from "./stats.js";
+import { loginEnabled, currentUser, handleAuth, logout, setNick } from "./auth.js";
+import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, exportAll, renderStatsPage, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -56,15 +57,21 @@ const json = (res, code, obj) => { res.writeHead(code, { "Content-Type": "applic
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
-    if (url.pathname.startsWith("/api/") && !rateOk(req)) return json(res, 429, { error: "太多請求了，等一下再試" });
+    if ((url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) && !rateOk(req)) return json(res, 429, { error: "太多請求了，等一下再試" });
+    if (url.pathname.startsWith("/auth/") && req.method === "GET" && await handleAuth(req, res, url)) return;
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
-    if (url.pathname === "/api/board") return handleBoard(res, url.searchParams);
+    if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
+    if (url.pathname === "/api/me") { const u = currentUser(req); return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "" } : null }); }
+    if (url.pathname === "/api/me/history") {
+      const u = currentUser(req);
+      return u ? json(res, 200, { user: { nick: u.nick || "", email: u.email || "" }, ...history(u.id) }) : json(res, 401, { error: "要先登入" });
+    }
     const sm = /^\/api\/share\/([0-9A-Za-z]{8})$/.exec(url.pathname);
     if (sm) { const sh = getShare(sm[1], true); return sh ? json(res, 200, sh) : json(res, 404, { error: "找不到這個挑戰，可能連結打錯了" }); }
     if (url.pathname === "/api/boards") {
       const p = ["day", "week", "all"].includes(url.searchParams.get("p")) ? url.searchParams.get("p") : "day";
-      return json(res, 200, boards(p, cleanId(url.searchParams.get("me"))));
+      return json(res, 200, boards(p, cleanId(url.searchParams.get("me")), 5, currentUser(req)?.id ?? null));
     }
     if (url.pathname === "/stats" || url.pathname === "/stats/export.json") return handleStats(req, res, url.pathname);
     if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
@@ -72,6 +79,7 @@ export const server = http.createServer(async (req, res) => {
     let p = decodeURIComponent(url.pathname);
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
+    if (p === "/me") p = "/me.html";
     let base = CLIENT_DIR, rel = p;
     if (p.startsWith("/shared/")) { base = SHARED_DIR; rel = p.slice("/shared".length); }
     const file = path.resolve(base, "." + rel);
@@ -125,14 +133,23 @@ async function handleApi(req, res, pathname) {
   const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" ? 512 * 1024 : 4096);
   if (body === "too-big") { res.writeHead(413, { Connection: "close" }); res.end(); res.on("finish", () => req.socket.destroy()); return; }
   if (!body || typeof body !== "object") return json(res, 400, { error: "格式不對" });
+  const user = currentUser(req);
   try {
+    if (pathname === "/api/logout") return logout(req, res);
+    if (pathname === "/api/me/nick") {
+      if (!user) return json(res, 401, { error: "要先登入" });
+      const nick = cleanName(body.nick);
+      if (!nick) return json(res, 400, { error: "先填一個暱稱" });
+      if (badName(nick)) return json(res, 400, { error: "暱稱有不適合的字，換一個吧" });
+      setNick(user.id, nick); return json(res, 200, { ok: true, nick });
+    }
     if (pathname === "/api/start") { const s = cleanId(body.sid); if (s && active.size < 5000) active.set(s, Date.now()); return json(res, 204); }
     if (pathname === "/api/end") { active.delete(cleanId(body.sid)); return json(res, 204); }
     if (pathname === "/api/visit") { recordVisit(body); return json(res, 204); }
-    if (pathname === "/api/run") { recordRun(body); return json(res, 204); }
-    if (pathname === "/api/learn") { recordLearn(body); return json(res, 204); }
-    if (pathname === "/api/score") return handleScore(res, body);
-    if (pathname === "/api/share") return handleShareCreate(res, body);
+    if (pathname === "/api/run") { recordRun(body, user?.id ?? null); return json(res, 204); }
+    if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }
+    if (pathname === "/api/score") return handleScore(res, body, user);
+    if (pathname === "/api/share") return handleShareCreate(res, body, user);
     const ev = /^\/api\/share\/([0-9A-Za-z]{8})\/(accept|win|lose)$/.exec(pathname);
     if (ev) { shareEvent(ev[1], ev[2]); return json(res, 204); }
     if (pathname === "/api/client-error") {
@@ -175,30 +192,32 @@ function verifyRun(b, { minAcc, minCorrect, what }) {
   return { cid, name, specs: specs.map((x) => ({ c: x.c, l: x.l, i: x.i })), sum: r.sum, flags };
 }
 
-function handleScore(res, b) {
+function handleScore(res, b, user) {
   const v = verifyRun(b, { minAcc: 0.9, minCorrect: 20, what: "上排行榜" });
   if (v.error) return json(res, 400, { error: v.error });
+  if (user) setNick(user.id, v.name);
   const s = v.sum, flags = v.flags;
-  const out = recordScore({ cid: v.cid, name: v.name, specs: v.specs, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
+  const out = recordScore({ cid: v.cid, userId: user?.id ?? null, name: v.name, specs: v.specs, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
   if (flags.length) console.warn(`[排行榜] 可疑成績（${flags.join(",")}）：${b.c}/${b.l}/${b.m} ${s.speed.toFixed(1)}`);
   json(res, 200, { ok: true, flagged: flags.length > 0, rank: out.rank, speed: s.speed, acc: s.acc });
 }
 
 /* ---------- 分享挑戰 ---------- */
-function handleShareCreate(res, b) {
+function handleShareCreate(res, b, user) {
   const v = verifyRun(b, { minAcc: 0.8, minCorrect: 10, what: "分享" });
   if (v.error) return json(res, 400, { error: v.error });
   if (v.flags.length) { console.warn(`[分享] 可疑成績不給分享（${v.flags.join(",")}）`); return json(res, 400, { error: "這次的打字節奏不太像人打的，不能分享" }); }
   const s = v.sum;
-  const id = createShare({ cid: v.cid, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, specs: v.specs, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms) });
+  if (user) setNick(user.id, v.name);
+  const id = createShare({ cid: v.cid, userId: user?.id ?? null, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, specs: v.specs, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms) });
   json(res, 200, { ok: true, id, speed: s.speed, acc: s.acc });
 }
 const SHARE_ID = /^[0-9A-Za-z]{8}$/;
 
-function handleBoard(res, q) {
+function handleBoard(req, res, q) {
   const c = q.get("c"), l = q.get("l"), m = q.get("m"), p = ["day", "week", "all"].includes(q.get("p")) ? q.get("p") : "day";
   if (!CATS.includes(c) || !LENS.includes(l) || !["full", "t60"].includes(m)) return json(res, 400, { error: "格式不對" });
-  json(res, 200, board(c, l, m, p, cleanId(q.get("me"))).map(({ id, ...r }) => r));
+  json(res, 200, board(c, l, m, p, cleanId(q.get("me")), 20, currentUser(req)?.id ?? null).map(({ id, ...r }) => r));
 }
 
 const sha = (s) => createHash("sha256").update(String(s)).digest();

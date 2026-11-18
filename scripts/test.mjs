@@ -131,7 +131,7 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
 /* ---------- 伺服器 API ---------- */
 const dir = mkdtempSync(path.join(tmpdir(), "meow-type-test-"));
 const srv = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", path.join(ROOT, "server/index.js")], {
-  env: { ...process.env, PORT: "0", HOST: "127.0.0.1", STATS_DB: path.join(dir, "t.db"), STATS_PASSWORD: "pw", APP_VERSION: "abc1234" }, stdio: ["ignore", "pipe", "pipe"],
+  env: { ...process.env, PORT: "0", HOST: "127.0.0.1", STATS_DB: path.join(dir, "t.db"), STATS_PASSWORD: "pw", APP_VERSION: "abc1234", AUTH_FAKE: "1", NODE_ENV: "test" }, stdio: ["ignore", "pipe", "pipe"],
 });
 let log = "";
 srv.stderr.on("data", (d) => { log += d; });
@@ -206,14 +206,36 @@ try {
   eq((await postJ("/api/score", { ...body, name: "<b>x</b>" }).then((r) => r.json())).ok, true, "暱稱的 HTML 符號會被去掉");
   const b2 = await (await get(`/api/board?c=cpp&l=para&m=full&p=all`)).json();
   ok(b2.every((r) => !/[<>]/.test(r.name)), "排行榜暱稱沒有 HTML 符號");
+  // Google 登入（測試用假登入）
+  ok((await (await get("/api/me")).json()).user === null, "沒登入時 /api/me 沒有使用者");
+  const lg = await fetch(base + "/auth/fake?sub=g-123&email=cat@example.com", { redirect: "manual" });
+  const sess = /mt_sess=([^;]+)/.exec(lg.headers.get("set-cookie") || "")?.[1];
+  ok(lg.status === 200 && sess && /HttpOnly/.test(lg.headers.get("set-cookie")), "登入後拿到 HttpOnly 的 session cookie");
+  const H = { Cookie: "mt_sess=" + sess, "Content-Type": "application/json" };
+  const me1 = await (await fetch(base + "/api/me", { headers: H })).json();
+  ok(me1.login === true && me1.user && me1.user.email === "cat@example.com", "登入後 /api/me 有使用者");
+  const ls = await (await fetch(base + "/api/score", { method: "POST", headers: H, body: JSON.stringify({ ...body, cid: "d".repeat(24), name: "登入貓" }) })).json();
+  ok(ls.ok && !ls.flagged, "登入後送排行榜");
+  const lb = await (await fetch(base + "/api/board?c=cpp&l=para&m=full&p=all", { headers: H })).json();
+  ok(lb.some((r) => r.name === "登入貓" && r.login && r.me) && lb.some((r) => r.name === "小橘" && !r.login && !r.me), "排行榜標出有登入的人與自己");
+  await fetch(base + "/api/run", { method: "POST", headers: H, body: JSON.stringify({ cid, sid, device: "desktop", c: "en", l: "sent", m: "full", rule: "back", ms: 20000, correct: 50, keys: 52, errs: 2, acc: 0.96, speed: 30, finished: true }) });
+  const hist = await (await fetch(base + "/api/me/history", { headers: H })).json();
+  ok(hist.total.done === 1 && hist.best[0].c === "en" && hist.user.nick === "登入貓", "個人頁紀錄（只算登入後的練習）");
+  eq((await get("/api/me/history")).status, 401, "沒登入看不到個人頁資料");
+  eq((await fetch(base + "/api/me/nick", { method: "POST", headers: H, body: JSON.stringify({ nick: "新名字" }) })).status, 200, "改暱稱");
+  eq((await fetch(base + "/api/me/nick", { method: "POST", headers: H, body: JSON.stringify({ nick: "白癡" }) })).status, 400, "改暱稱也擋不適合的字");
+  ok((await get("/me")).status === 200 && (await get("/auth-done.js")).status === 200 && (await get("/account.js")).status === 200, "個人頁與登入程式");
+  await fetch(base + "/api/logout", { method: "POST", headers: H, body: "{}" });
+  ok((await (await fetch(base + "/api/me", { headers: H })).json()).user === null, "登出後 session 失效");
   eq((await get("/stats")).status, 401, "統計頁要密碼");
   const st = await get("/stats", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") });
   const stHtml = await st.text();
   ok(st.status === 200 && stHtml.includes("上課檢查") && stHtml.includes("學一下"), "統計頁");
   const ex = await (await get("/stats/export.json", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") })).json();
-  ok(ex.runs.length === 1 && ex.scores.length >= 4 && ex.learn.length === 1 && ex.shares.length === 2 && ex.shares.some((x) => x.views >= 1 && x.accepts === 1 && x.wins === 1), "匯出資料");
+  ok(ex.runs.length === 2 && ex.scores.length >= 4 && ex.learn.length === 1 && ex.shares.length === 2 && ex.shares.some((x) => x.views >= 1 && x.accepts === 1 && x.wins === 1), "匯出資料");
   ok(stHtml.includes("分享挑戰"), "統計頁有分享挑戰");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
+  ok(!JSON.stringify(ex).includes("cat@example.com") && !JSON.stringify(ex).includes("g-123"), "匯出資料不含 email 與 Google 編號");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }
 finally { srv.kill(); rmSync(dir, { recursive: true, force: true }); }
 

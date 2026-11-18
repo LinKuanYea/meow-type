@@ -31,8 +31,16 @@ export function initStats(file) {
     CREATE INDEX IF NOT EXISTS scores_board ON scores(cat, len, mode, ts);
     CREATE INDEX IF NOT EXISTS runs_ts ON runs(ts);
   `);
-  // v0.5：排行榜存題目，「挑戰他」才能打同一題（舊資料沒有，挑戰時改成隨機出題）
-  if (!db.prepare("PRAGMA table_info(scores)").all().some((c) => c.name === "specs")) db.exec("ALTER TABLE scores ADD COLUMN specs TEXT");
+  const addCol = (t, c, type) => { if (!db.prepare(`PRAGMA table_info(${t})`).all().some((x) => x.name === c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${type}`); };
+  // v0.4.1：排行榜存題目，「挑戰他」才能打同一題（舊資料沒有，挑戰時改成隨機出題）
+  addCol("scores", "specs", "TEXT");
+  // v0.5：Google 登入（選填）。sub＝Google 帳號固定編號；不存姓名
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, sub TEXT NOT NULL UNIQUE, email TEXT, nick TEXT, created INTEGER NOT NULL, last_login INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
+  `);
+  for (const t of ["runs", "scores", "shares", "learn"]) addCol(t, "user_id", "INTEGER");
+  db.exec("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, ts)");
 }
 
 export function recordVisit(v) {
@@ -40,21 +48,23 @@ export function recordVisit(v) {
     .run(Date.now(), cleanId(v.cid), cleanId(v.sid), cleanDevice(v.device), int(v.sw, 10000), int(v.sh, 10000));
 }
 
-export function recordRun(r) {
+export const dbh = () => db;
+
+export function recordRun(r, userId = null) {
   if (!CATS.includes(r.c) || ![...LENS, "drill"].includes(r.l) || !["full", "t60"].includes(r.m) || !["block", "back", "free"].includes(r.rule)) throw new Error("練習紀錄格式不對");
-  db.prepare(`INSERT INTO runs (ts,cid,sid,device,cat,len,mode,rule,ms,correct,keys,errs,acc,speed,width,indent,semi,kase,enter,backs,pastes,bursts,ime,finished)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  db.prepare(`INSERT INTO runs (ts,cid,sid,device,cat,len,mode,rule,ms,correct,keys,errs,acc,speed,width,indent,semi,kase,enter,backs,pastes,bursts,ime,finished,user_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     Date.now(), cleanId(r.cid), cleanId(r.sid), cleanDevice(r.device), r.c, r.l, r.m, r.rule,
     int(r.ms, 3600000), int(r.correct), int(r.keys), int(r.errs), num(r.acc, 0, 1) ?? 0, num(r.speed, 0, 1000) ?? 0,
-    int(r.width), int(r.indent), int(r.semi), int(r.kase), int(r.enter), int(r.backs), int(r.pastes), int(r.bursts), int(r.ime), r.finished ? 1 : 0);
+    int(r.width), int(r.indent), int(r.semi), int(r.kase), int(r.enter), int(r.backs), int(r.pastes), int(r.bursts), int(r.ime), r.finished ? 1 : 0, userId);
 }
 
 /** 「學一下」卡片的使用情形：有沒有作答預測輸出、答對、跳過、展開幾行說明 */
-export function recordLearn(r) {
+export function recordLearn(r, userId = null) {
   if (!CATS.includes(r.c) || !LENS.includes(r.l)) throw new Error("學一下紀錄格式不對");
   const item = typeof r.item === "string" && /^[0-9,]{1,60}$/.test(r.item) ? r.item : null;
-  db.prepare("INSERT INTO learn (ts,cid,sid,cat,len,item,quiz,answered,correct,skipped,opened) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
-    .run(Date.now(), cleanId(r.cid), cleanId(r.sid), r.c, r.l, item, r.quiz ? 1 : 0, r.answered ? 1 : 0, r.correct ? 1 : 0, r.skipped ? 1 : 0, int(r.opened, 500));
+  db.prepare("INSERT INTO learn (ts,cid,sid,cat,len,item,quiz,answered,correct,skipped,opened,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(Date.now(), cleanId(r.cid), cleanId(r.sid), r.c, r.l, item, r.quiz ? 1 : 0, r.answered ? 1 : 0, r.correct ? 1 : 0, r.skipped ? 1 : 0, int(r.opened, 500), userId);
 }
 
 /* ---------- 分享挑戰 ---------- */
@@ -63,8 +73,8 @@ export function createShare(x) {
   for (let k = 0; k < 5; k++) {
     const id = Array.from(randomBytes(8), (b) => B62[b % 62]).join("");
     try {
-      db.prepare("INSERT INTO shares (id,ts,cid,name,cat,len,mode,rule,specs,speed,acc,correct,ms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        .run(id, Date.now(), x.cid, x.name, x.c, x.l, x.m, x.rule, JSON.stringify(x.specs), x.speed, x.acc, x.correct, x.ms);
+      db.prepare("INSERT INTO shares (id,ts,cid,name,cat,len,mode,rule,specs,speed,acc,correct,ms,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .run(id, Date.now(), x.cid, x.name, x.c, x.l, x.m, x.rule, JSON.stringify(x.specs), x.speed, x.acc, x.correct, x.ms, x.userId ?? null);
       return id;
     } catch (e) { if (!/UNIQUE|PRIMARY/.test(e.message)) throw e; }
   }
@@ -75,7 +85,7 @@ export function getShare(id, count) {
   const r = db.prepare("SELECT * FROM shares WHERE id=?").get(id);
   if (!r) return null;
   if (count) db.prepare("UPDATE shares SET views=views+1 WHERE id=?").run(id);
-  return { id: r.id, ts: r.ts, name: r.name, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
+  return { id: r.id, ts: r.ts, name: r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
 }
 export function shareEvent(id, kind) {
   const col = { accept: "accepts", win: "wins", lose: "loses" }[kind];
@@ -90,28 +100,49 @@ export function periodStart(p, now = Date.now()) {
   if (p === "week") { const dow = (new Date(day).getUTCDay() + 6) % 7; return day - dow * 86400000 - TZ; } // 週一 00:00
   return day - TZ;
 }
-export function board(c, l, m, p, me, limit = 20) {
-  const rows = db.prepare(`SELECT name, speed, acc, rule, cid, ts, id, specs FROM (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY cid ORDER BY speed DESC, ts ASC) rn FROM scores
+/** 排行榜：每人只留最好的一次。登入的人以帳號算（換電腦也是同一個人），沒登入的以瀏覽器編號算 */
+export function board(c, l, m, p, me, limit = 20, meUser = null) {
+  const rows = db.prepare(`SELECT name, speed, acc, rule, cid, ts, id, specs, user_id FROM (
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY COALESCE('u' || user_id, cid) ORDER BY speed DESC, ts ASC) rn FROM scores
       WHERE cat=? AND len=? AND mode=? AND flag='' AND ts>=?) WHERE rn=1 ORDER BY speed DESC, ts ASC LIMIT ?`)
     .all(c, l, m, periodStart(p), limit);
   const parse = (x) => { try { return x ? JSON.parse(x) : null; } catch { return null; } };
-  return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, me: !!me && r.cid === me, id: r.id, specs: parse(r.specs) }));
+  return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, login: r.user_id != null,
+    me: (meUser != null && r.user_id === meUser) || (!!me && r.cid === me && (r.user_id == null || r.user_id === meUser)), id: r.id, specs: parse(r.specs) }));
 }
 /** 所有設定的排行榜：每種「題庫×長度×模式」的前幾名（依題庫、長度、模式排序） */
-export function boards(p, me, limit = 5) {
+export function boards(p, me, limit = 5, meUser = null) {
   const combos = db.prepare("SELECT DISTINCT cat, len, mode FROM scores WHERE flag='' AND ts>=?").all(periodStart(p));
   const ord = (r) => CATS.indexOf(r.cat) * 100 + LENS.indexOf(r.len) * 10 + (r.mode === "t60" ? 1 : 0);
-  return combos.sort((a, b) => ord(a) - ord(b)).map((r) => ({ c: r.cat, l: r.len, m: r.mode, rows: board(r.cat, r.len, r.mode, p, me, limit).map(({ id, ...x }) => x) }));
+  return combos.sort((a, b) => ord(a) - ord(b)).map((r) => ({ c: r.cat, l: r.len, m: r.mode, rows: board(r.cat, r.len, r.mode, p, me, limit, meUser).map(({ id, ...x }) => x) }));
 }
 /** 存一筆成績；回傳今天的名次（這次比之前好才有名次） */
 export function recordScore(s) {
-  const info = db.prepare("INSERT INTO scores (ts,cid,name,cat,len,mode,rule,speed,acc,correct,ms,flag,specs) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(Date.now(), s.cid, s.name, s.c, s.l, s.m, s.rule, s.speed, s.acc, s.correct, s.ms, s.flag || "", s.specs ? JSON.stringify(s.specs) : null);
+  const info = db.prepare("INSERT INTO scores (ts,cid,name,cat,len,mode,rule,speed,acc,correct,ms,flag,specs,user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(Date.now(), s.cid, s.name, s.c, s.l, s.m, s.rule, s.speed, s.acc, s.correct, s.ms, s.flag || "", s.specs ? JSON.stringify(s.specs) : null, s.userId ?? null);
   if (s.flag) return { rank: null };
-  const day = board(s.c, s.l, s.m, "day", s.cid, 1000);
+  const day = board(s.c, s.l, s.m, "day", s.cid, 1000, s.userId ?? null);
   const i = day.findIndex((r) => r.id === Number(info.lastInsertRowid));
   return { rank: i >= 0 ? i + 1 : null };
+}
+
+/** 個人頁：只有登入的本人看得到 */
+export function history(userId) {
+  const q = (sql, ...a) => db.prepare(sql).all(...a);
+  const one = (sql, ...a) => db.prepare(sql).get(...a);
+  const since7 = Date.now() - 7 * 86400000;
+  return {
+    total: one(`SELECT COUNT(*) runs, SUM(finished) done, COALESCE(SUM(ms),0) ms, SUM(CASE WHEN ts>=? THEN 1 ELSE 0 END) week,
+      MIN(ts) first FROM runs WHERE user_id=?`, since7, userId),
+    best: q(`SELECT cat c, len l, mode m, COUNT(*) n, MAX(speed) best, AVG(speed) avg, AVG(acc) acc FROM runs
+      WHERE user_id=? AND finished=1 AND len<>'drill' GROUP BY cat, len, mode ORDER BY n DESC`, userId),
+    trend: q(`SELECT ts, cat c, len l, mode m, speed, acc FROM (SELECT * FROM runs WHERE user_id=? AND finished=1 AND len<>'drill' ORDER BY ts DESC LIMIT 200) ORDER BY ts`, userId),
+    errors: q(`SELECT cat c, COUNT(*) n, SUM(keys) keys, SUM(errs) errs, SUM(width) width, SUM(indent) indent, SUM(semi) semi, SUM(kase) kase, SUM(enter) enter, SUM(backs) backs
+      FROM runs WHERE user_id=? AND finished=1 GROUP BY cat`, userId),
+    learn: one("SELECT COUNT(*) n, COALESCE(SUM(answered),0) answered, COALESCE(SUM(correct),0) correct FROM learn WHERE user_id=?", userId),
+    recent: q(`SELECT ts, cat c, len l, mode m, rule, speed, acc, ms, errs FROM runs WHERE user_id=? AND finished=1 ORDER BY ts DESC LIMIT 20`, userId),
+    shares: q("SELECT id, ts, cat c, len l, mode m, speed, acc, views, accepts, wins, loses FROM shares WHERE user_id=? ORDER BY ts DESC LIMIT 20", userId),
+  };
 }
 
 export function exportAll() {
@@ -121,7 +152,8 @@ export function exportAll() {
     runs: db.prepare("SELECT * FROM runs").all(),
     scores: db.prepare("SELECT * FROM scores").all(),
     learn: db.prepare("SELECT * FROM learn").all(),
-    shares: db.prepare("SELECT id, ts, cid, name, cat, len, mode, rule, speed, acc, correct, ms, views, accepts, wins, loses FROM shares").all(),
+    shares: db.prepare("SELECT id, ts, cid, user_id, name, cat, len, mode, rule, speed, acc, correct, ms, views, accepts, wins, loses FROM shares").all(),
+    users: db.prepare("SELECT id, created, last_login FROM users").all(), // 匯出不含 Google 編號與 email
   };
 }
 
@@ -163,7 +195,7 @@ export function renderStatsPage() {
 table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{border-bottom:1px solid #ecdcc8;padding:5px 8px;text-align:left;white-space:nowrap}th{background:#f6ead9}
 .wrap{overflow-x:auto}.k{display:flex;flex-wrap:wrap;gap:10px}.k div{background:#fff;border:2px solid #ecdcc8;border-radius:10px;padding:6px 12px}.k b{display:block;font-size:24px}p.n{color:#8a735f;font-size:13px}a{color:#c0641a}</style></head><body>
 <h1>喵打統計</h1><p class="n">全部匿名。時間是台灣時間。<a href="/stats/export.json">下載全部原始資料（JSON）</a></p>
-<div class="k"><div>造訪<b>${tot.v}</b></div><div>不同的人<b>${tot.u}</b></div><div>回來第二天以上<b>${ret.back ?? 0}</b></div><div>練完的局數<b>${tot.rf}</b></div><div>中途放棄<b>${tot.ra}</b></div><div>排行榜成績<b>${tot.s}</b></div><div>可疑（沒上榜）<b>${tot.sf}</b></div></div>
+<div class="k"><div>登入帳號<b>${one("SELECT COUNT(*) n FROM users").n}</b></div><div>造訪<b>${tot.v}</b></div><div>不同的人<b>${tot.u}</b></div><div>回來第二天以上<b>${ret.back ?? 0}</b></div><div>練完的局數<b>${tot.rf}</b></div><div>中途放棄<b>${tot.ra}</b></div><div>排行榜成績<b>${tot.s}</b></div><div>可疑（沒上榜）<b>${tot.sf}</b></div></div>
 <h2>上課檢查（每天）</h2><p class="n">速度：程式和英文是 WPM，中文是字/分（只算練完的局）。「輸入法沒切」＝打程式或英文時開始選字的局數。</p>
 <div class="wrap">${table(["日期", "局數", "人數", "練完", "C++", "Python", "英文", "中文", "正確率", "擋下貼上", "一次湧進多字", "輸入法沒切", "可疑成績"],
     daily.map((r) => [r.d, r.n, r.u, pct(r.fin), r1(r.cpp), r1(r.py), r1(r.en), r1(r.zh), pct(r.acc), r.pastes, r.bursts, r.ime, flagged[r.d] || 0]))}</div>
