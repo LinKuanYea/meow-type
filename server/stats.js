@@ -40,6 +40,8 @@ export function initStats(file) {
     CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
   `);
   for (const t of ["runs", "scores", "shares", "learn"]) addCol(t, "user_id", "INTEGER");
+  // v0.6：管理頁的設定（例如 Google 登入的用戶端），存在資料庫，改了馬上生效，不用重新部署
+  db.exec("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT, updated INTEGER NOT NULL)");
   db.exec("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, ts)");
 }
 
@@ -49,6 +51,11 @@ export function recordVisit(v) {
 }
 
 export const dbh = () => db;
+export function getSetting(k) { return db.prepare("SELECT v FROM settings WHERE k=?").get(k)?.v ?? ""; }
+export function setSetting(k, v) {
+  if (v == null || v === "") db.prepare("DELETE FROM settings WHERE k=?").run(k);
+  else db.prepare("INSERT INTO settings (k,v,updated) VALUES (?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated=excluded.updated").run(k, String(v), Date.now());
+}
 
 export function recordRun(r, userId = null) {
   if (!CATS.includes(r.c) || ![...LENS, "drill"].includes(r.l) || !["full", "t60"].includes(r.m) || !["block", "back", "free"].includes(r.rule)) throw new Error("練習紀錄格式不對");
@@ -166,7 +173,8 @@ const dayExpr = "date((ts/1000) + 8*3600, 'unixepoch')";
 const FLAG = { burst: "一次湧進很多字", "too-fast-keys": "按鍵間隔太短", "too-regular": "節奏太規律", "too-fast": "速度超過上限", mismatch: "前端成績和驗算不同" };
 const RULE = { block: "擋下", back: "要倒退修", free: "可以帶錯" };
 
-export function renderStatsPage() {
+/** 統計（放在管理頁裡） */
+export function renderStatsBody() {
   const q = (sql, ...a) => db.prepare(sql).all(...a);
   const one = (sql, ...a) => db.prepare(sql).get(...a);
   const tot = one(`SELECT (SELECT COUNT(*) FROM visits) v, (SELECT COUNT(DISTINCT cid) FROM visits) u, (SELECT COUNT(*) FROM runs WHERE finished=1) rf,
@@ -190,11 +198,7 @@ export function renderStatsPage() {
   const hard = q(`SELECT cat, len, item, COUNT(*) n, SUM(correct) ok FROM learn WHERE answered=1 GROUP BY cat, len, item HAVING n >= 3 ORDER BY 1.0*ok/n LIMIT 10`);
   const itemName = (c, l, item) => { const x = BANK[c]?.[l]?.[Number(String(item).split(",")[0])]; return x && typeof x === "object" ? (x.title || x.t) : esc(item); };
   const tw = (ts) => new Date(ts + TZ).toISOString().slice(5, 16).replace("T", " ");
-  return `<!DOCTYPE html><html lang="zh-Hant-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>喵打統計</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;margin:0;padding:20px max(4vw,12px);color:#2a1d14;background:#fffaf2}h1{margin:0 0 4px}h2{margin:28px 0 8px;font-size:19px}
-table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{border-bottom:1px solid #ecdcc8;padding:5px 8px;text-align:left;white-space:nowrap}th{background:#f6ead9}
-.wrap{overflow-x:auto}.k{display:flex;flex-wrap:wrap;gap:10px}.k div{background:#fff;border:2px solid #ecdcc8;border-radius:10px;padding:6px 12px}.k b{display:block;font-size:24px}p.n{color:#8a735f;font-size:13px}a{color:#c0641a}</style></head><body>
-<h1>喵打統計</h1><p class="n">全部匿名。時間是台灣時間。<a href="/stats/export.json">下載全部原始資料（JSON）</a></p>
+  return `<p class="n">全部匿名。時間是台灣時間。<a href="/admin/export.json">下載全部原始資料（JSON）</a></p>
 <div class="k"><div>登入帳號<b>${one("SELECT COUNT(*) n FROM users").n}</b></div><div>造訪<b>${tot.v}</b></div><div>不同的人<b>${tot.u}</b></div><div>回來第二天以上<b>${ret.back ?? 0}</b></div><div>練完的局數<b>${tot.rf}</b></div><div>中途放棄<b>${tot.ra}</b></div><div>排行榜成績<b>${tot.s}</b></div><div>可疑（沒上榜）<b>${tot.sf}</b></div></div>
 <h2>上課檢查（每天）</h2><p class="n">速度：程式和英文是 WPM，中文是字/分（只算練完的局）。「輸入法沒切」＝打程式或英文時開始選字的局數。</p>
 <div class="wrap">${table(["日期", "局數", "人數", "練完", "C++", "Python", "英文", "中文", "正確率", "擋下貼上", "一次湧進多字", "輸入法沒切", "可疑成績"],
@@ -215,5 +219,5 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{b
 <h2>最近的排行榜成績</h2><div class="wrap">${table(["時間", "暱稱", "題庫", "長度", "模式", "規則", "速度", "正確率", "狀態"],
     recent.map((r) => [tw(r.ts), esc(r.name), CAT_NAME[r.cat] || "", LEN_NAME[r.len] || "", r.mode === "t60" ? "1 分鐘" : "打完一題", RULE[r.rule] || "", r1(r.speed), pct(r.acc),
       r.flag ? "可疑：" + r.flag.split(",").map((f) => FLAG[f] || esc(f)).join("、") : "上榜"]))}</div>
-</body></html>`;
+`;
 }

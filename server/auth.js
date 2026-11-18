@@ -3,18 +3,22 @@
 // 只拿 openid、email 兩個範圍；資料庫存 Google 帳號編號（sub）與 email，不存姓名。
 // 每個喵系列專案各自登入，但都用 Google 的 sub 當使用者編號，以後要串起來對得上。
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { dbh } from "./stats.js";
+import { dbh, getSetting } from "./stats.js";
 
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
-const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+// 設定來源：管理頁（/admin）存在資料庫的優先，沒有才用環境變數
+export function oauthConfig() {
+  const id = getSetting("google_client_id") || process.env.GOOGLE_CLIENT_ID || "";
+  const secret = getSetting("google_client_secret") || process.env.GOOGLE_CLIENT_SECRET || "";
+  const url = String(getSetting("public_url") || process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+  return { id, secret, url };
+}
 // 測試用：AUTH_FAKE=1 而且不是正式環境時，開放 /auth/fake 直接登入（Docker 映像檔設 NODE_ENV=production，所以正式機一定關閉）
 const FAKE = process.env.AUTH_FAKE === "1" && process.env.NODE_ENV !== "production";
 const SESSION_DAYS = 180;
-const SECURE = PUBLIC_URL.startsWith("https://");
+const secure = () => oauthConfig().url.startsWith("https://");
 
-export const loginEnabled = () => FAKE || !!(CLIENT_ID && CLIENT_SECRET && PUBLIC_URL);
-if (!loginEnabled()) console.warn("[登入] 沒有設定 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / PUBLIC_URL，Google 登入不會出現。");
+export const googleReady = () => { const c = oauthConfig(); return !!(c.id && c.secret && c.url); };
+export const loginEnabled = () => FAKE || googleReady();
 
 const sha = (s) => createHash("sha256").update(String(s)).digest("hex");
 function cookies(req) {
@@ -26,7 +30,7 @@ function cookies(req) {
   return out;
 }
 const cookie = (name, value, maxAge, path = "/") =>
-  `${name}=${encodeURIComponent(value)}; Path=${path}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${SECURE ? "; Secure" : ""}`;
+  `${name}=${encodeURIComponent(value)}; Path=${path}; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure() ? "; Secure" : ""}`;
 
 /** 目前登入的人：{ id, email, nick } 或 null */
 export function currentUser(req) {
@@ -62,8 +66,9 @@ const safeBack = (p) => (typeof p === "string" && /^\/[A-Za-z0-9/_-]{0,40}$/.tes
 
 /** /auth/* 的處理；不是登入相關的網址回傳 false */
 export async function handleAuth(req, res, url) {
+  const { id: CLIENT_ID, secret: CLIENT_SECRET, url: PUBLIC_URL } = oauthConfig();
   if (url.pathname === "/auth/google") {
-    if (!loginEnabled() || FAKE && !CLIENT_ID) { donePage(res, false, "Google 登入還沒開放。", "/"); return true; }
+    if (!googleReady()) { donePage(res, false, "Google 登入還沒開放。", "/"); return true; }
     const state = randomBytes(18).toString("base64url"), back = safeBack(url.searchParams.get("back"));
     const q = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: `${PUBLIC_URL}/auth/google/callback`, response_type: "code",
       scope: "openid email", state, prompt: "select_account" });

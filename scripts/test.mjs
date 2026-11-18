@@ -227,13 +227,42 @@ try {
   ok((await get("/me")).status === 200 && (await get("/auth-done.js")).status === 200 && (await get("/account.js")).status === 200, "個人頁與登入程式");
   await fetch(base + "/api/logout", { method: "POST", headers: H, body: "{}" });
   ok((await (await fetch(base + "/api/me", { headers: H })).json()).user === null, "登出後 session 失效");
-  eq((await get("/stats")).status, 401, "統計頁要密碼");
-  const st = await get("/stats", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") });
+  // 管理頁
+  eq((await fetch(base + "/stats", { redirect: "manual" })).headers.get("location"), "/admin", "舊統計網址導到管理頁");
+  const host = base.replace(/^http:\/\//, ""), O = { Origin: base, "Content-Type": "application/x-www-form-urlencoded" };
+  const a0 = await (await get("/admin")).text();
+  ok(a0.includes('name="password"') && !a0.includes("上課檢查"), "沒登入只看到管理密碼表單");
+  eq((await get("/admin")).headers.get("referrer-policy"), "same-origin", "管理頁的 Referrer-Policy 要讓表單帶 Origin");
+  eq((await fetch(base + "/admin/login", { method: "POST", headers: O, body: "password=wrong" })).status, 401, "管理密碼錯誤");
+  eq((await fetch(base + "/admin/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "password=pw" })).status, 403, "沒有 Origin 的登入要擋");
+  const al = await fetch(base + "/admin/login", { method: "POST", headers: O, body: "password=pw", redirect: "manual" });
+  const adm = /mt_admin=([^;]+)/.exec(al.headers.get("set-cookie") || "")?.[1];
+  ok(al.status === 303 && adm && /SameSite=Strict/.test(al.headers.get("set-cookie")) && /Path=\/admin/.test(al.headers.get("set-cookie")), "管理登入拿到 cookie");
+  const AC = { Cookie: "mt_admin=" + adm };
+  const st = await get("/admin", AC);
   const stHtml = await st.text();
-  ok(st.status === 200 && stHtml.includes("上課檢查") && stHtml.includes("學一下"), "統計頁");
-  const ex = await (await get("/stats/export.json", { Authorization: "Basic " + Buffer.from("x:pw").toString("base64") })).json();
+  ok(st.status === 200 && stHtml.includes("上課檢查") && stHtml.includes("學一下"), "管理頁的統計");
+  const ex = await (await get("/admin/export.json", AC)).json();
   ok(ex.runs.length === 2 && ex.scores.length >= 4 && ex.learn.length === 1 && ex.shares.length === 2 && ex.shares.some((x) => x.views >= 1 && x.accepts === 1 && x.wins === 1), "匯出資料");
+  ok(!("settings" in ex), "匯出資料不含管理設定");
   ok(stHtml.includes("分享挑戰"), "統計頁有分享挑戰");
+  ok((await (await get("/admin/google", AC)).text()).includes("未開啟"), "Google 登入一開始未開啟");
+  const g1 = await fetch(base + "/admin/google", { method: "POST", headers: { ...O, ...AC }, redirect: "manual",
+    body: new URLSearchParams({ client_id: "1234567890-abcdef.apps.googleusercontent.com", client_secret: "GOCSPX-secretvalue1234", public_url: "https://meow-type.otlab.org" }).toString() });
+  ok(g1.status === 303 && g1.headers.get("location").includes("m=saved"), "儲存 Google 登入設定");
+  const gp = await (await get("/admin/google", AC)).text();
+  ok(gp.includes("已開啟") && gp.includes("1234567890-abcdef.apps.googleusercontent.com") && !gp.includes("GOCSPX-secretvalue1234") && gp.includes("結尾 1234"), "設定生效，密鑰不會再顯示");
+  const gr = await fetch(base + "/auth/google?back=/", { redirect: "manual" });
+  ok(gr.status === 302 && gr.headers.get("location").startsWith("https://accounts.google.com/") && gr.headers.get("location").includes("redirect_uri=https%3A%2F%2Fmeow-type.otlab.org%2Fauth%2Fgoogle%2Fcallback"), "設定後導向 Google 登入");
+  const g2 = await fetch(base + "/admin/google", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...AC }, redirect: "manual", body: "action=clear" });
+  ok(g2.headers.get("location").includes("m=origin") && (await (await get("/admin/google", AC)).text()).includes("已開啟"), "沒有 Origin 的修改要擋");
+  const g3 = await fetch(base + "/admin/google", { method: "POST", headers: { ...O, ...AC }, redirect: "manual", body: "client_id=not-a-client-id" });
+  ok(g3.headers.get("location").includes("m=bad"), "格式不對的用戶端 ID 不收");
+  await fetch(base + "/admin/google", { method: "POST", headers: { ...O, ...AC }, redirect: "manual", body: "action=clear" });
+  ok((await (await get("/admin/google", AC)).text()).includes("未開啟"), "清除 Google 登入設定");
+  await fetch(base + "/admin/logout", { method: "POST", headers: { ...O, ...AC }, redirect: "manual" });
+  ok(!(await (await get("/admin", AC)).text()).includes("上課檢查"), "管理登出");
+  void host;
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
   ok(!JSON.stringify(ex).includes("cat@example.com") && !JSON.stringify(ex).includes("g-123"), "匯出資料不含 email 與 Google 編號");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }

@@ -68,6 +68,8 @@ python3 scripts/build-code-bank.py   # 需要 g++ 與 python3；會實際執行�
 
 ### 設定
 
+在管理頁 `/admin` →「Google 登入」直接貼上用戶端 ID 和密鑰，存在資料庫、馬上生效（頁面上有一步一步的說明）。也可以用環境變數（管理頁沒設定時才用）：
+
 1. Google Cloud Console → Google Auth Platform：
    - 對象（Audience）選「外部」（External），發布狀態設成「正式版」（In production）。只用 openid、email 不需要送 Google 審查。
    - 用戶端 → 建立「網頁應用程式」，已授權的重新導向 URI 填 `https://meow-type.otlab.org/auth/google/callback`。
@@ -148,12 +150,18 @@ sudo systemctl disable --now meow-type-update.timer   # 暫停自動更新
 
 伺服器上的 `/opt/meow-type` 不要手動改程式碼，更新時會被 GitHub 上的版本覆蓋。`.env` 不受影響。
 
+## 管理頁 /admin
+
+用 `ADMIN_PASSWORD`（沒設定就用 `STATS_PASSWORD`）登入，登入狀態 12 小時、伺服器重開要重新登入；密碼錯 8 次會擋 10 分鐘。
+分頁：統計（原本的 /stats）、Google 登入設定、資料匯出。以後管理相關的功能都放這裡。
+所有修改都要從管理頁本身送出（檢查 Origin），用戶端密鑰存進去之後畫面上只顯示結尾 4 碼。
+
 ## 練習統計
 
 玩家第一次進入會看到說明，按「同意」才記錄（不同意也能練習）。全部匿名：不記姓名、IP、位置、打字內容。
 
 1. 在 `.env` 設定 `STATS_PASSWORD=你的密碼`，重新跑 `./scripts/deploy.sh`。
-2. 打開 `https://你的網域/stats`，帳號隨便填、密碼填上面那個。
+2. 打開 `https://你的網域/admin`，輸入上面那個密碼。
 
 統計頁有「上課檢查（每天）」：局數、人數、練完比例、各題庫平均速度、正確率、擋下貼上次數、輸入法沒切英數的局數、可疑成績。
 另外有題庫 × 長度 × 模式的平均錯誤種類、三種打錯規則的比較、裝置、最近的排行榜成績。頁面上方可以下載全部原始資料（JSON）。

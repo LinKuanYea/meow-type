@@ -1,16 +1,16 @@
 // 喵打：伺服器
 // - 提供網頁（client/、shared/）
 // - /api/*：匿名練習統計、排行榜（成績用 shared/judge.js 重播按鍵紀錄驗算）
-// - /stats：統計頁（需要 STATS_PASSWORD）
+// - /admin：管理頁（統計、Google 登入設定、資料匯出；需要 ADMIN_PASSWORD 或 STATS_PASSWORD）
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
+import { handleAdmin } from "./admin.js";
 import { loginEnabled, currentUser, handleAuth, logout, setNick } from "./auth.js";
-import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, exportAll, renderStatsPage, cleanId } from "./stats.js";
+import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -19,7 +19,6 @@ const SHARED_DIR = path.join(ROOT, "shared");
 const envInt = (k, d) => { const v = Number.parseInt(process.env[k] ?? "", 10); return Number.isFinite(v) && v > 0 ? v : d; };
 const PORT = Number.parseInt(process.env.PORT ?? "8080", 10);
 const HOST = process.env.HOST || "0.0.0.0";
-const STATS_PASSWORD = process.env.STATS_PASSWORD || "";
 const RATE_PER_MIN = envInt("RATE_PER_MIN", 1500); // 同一個 IP 每分鐘最多幾個請求（學校全班共用一個對外 IP，所以設高一點）
 /* 版本：部署時由 deploy.sh 帶入 GitHub commit 代碼（APP_VERSION）與時間（APP_BUILT） */
 const PKG_VERSION = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8")).version;
@@ -28,7 +27,6 @@ const APP_BUILT = String(process.env.APP_BUILT || "").replace(/[^0-9/: -]/g, "")
 const VERSION_LABEL = `v${PKG_VERSION}（${APP_VERSION}${APP_BUILT ? `・${APP_BUILT}` : ""}）`;
 console.log(`喵打 ${VERSION_LABEL}`);
 initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
-if (!STATS_PASSWORD) console.warn("[統計] 沒有設定 STATS_PASSWORD，統計頁 /stats 不會開放。");
 
 /* ---------- Node 版本檢查（2026-10-21 資安更新） ---------- */
 const PATCHED = { 22: [22, 23, 4], 24: [24, 22, 1], 26: [26, 12, 1] };
@@ -57,8 +55,9 @@ const json = (res, code, obj) => { res.writeHead(code, { "Content-Type": "applic
 export const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
-    if ((url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) && !rateOk(req)) return json(res, 429, { error: "太多請求了，等一下再試" });
+    if (/^\/(api|auth|admin)(\/|$)/.test(url.pathname) && !rateOk(req)) return json(res, 429, { error: "太多請求了，等一下再試" });
     if (url.pathname.startsWith("/auth/") && req.method === "GET" && await handleAuth(req, res, url)) return;
+    if (await handleAdmin(req, res, url)) return;
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
@@ -73,7 +72,7 @@ export const server = http.createServer(async (req, res) => {
       const p = ["day", "week", "all"].includes(url.searchParams.get("p")) ? url.searchParams.get("p") : "day";
       return json(res, 200, boards(p, cleanId(url.searchParams.get("me")), 5, currentUser(req)?.id ?? null));
     }
-    if (url.pathname === "/stats" || url.pathname === "/stats/export.json") return handleStats(req, res, url.pathname);
+    if (url.pathname === "/stats" || url.pathname === "/stats/export.json") { res.writeHead(302, { Location: url.pathname === "/stats" ? "/admin" : "/admin/export.json" }); res.end(); return; } // 舊網址
     if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
     if (url.pathname === "/version") return json(res, 200, { version: APP_VERSION, label: VERSION_LABEL });
     let p = decodeURIComponent(url.pathname);
@@ -218,24 +217,6 @@ function handleBoard(req, res, q) {
   const c = q.get("c"), l = q.get("l"), m = q.get("m"), p = ["day", "week", "all"].includes(q.get("p")) ? q.get("p") : "day";
   if (!CATS.includes(c) || !LENS.includes(l) || !["full", "t60"].includes(m)) return json(res, 400, { error: "格式不對" });
   json(res, 200, board(c, l, m, p, cleanId(q.get("me")), 20, currentUser(req)?.id ?? null).map(({ id, ...r }) => r));
-}
-
-const sha = (s) => createHash("sha256").update(String(s)).digest();
-function handleStats(req, res, pathname) {
-  if (!STATS_PASSWORD) { res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }); res.end("統計頁未開放：請在 .env 設定 STATS_PASSWORD 後重新部署。"); return; }
-  const auth = String(req.headers.authorization || "");
-  const pass = auth.startsWith("Basic ") ? Buffer.from(auth.slice(6), "base64").toString("utf8").split(":").slice(1).join(":") : "";
-  if (!timingSafeEqual(sha(pass), sha(STATS_PASSWORD))) {
-    res.writeHead(401, { "WWW-Authenticate": 'Basic realm="meow-type-stats", charset="UTF-8"', "Content-Type": "text/plain; charset=utf-8" });
-    res.end("需要密碼"); return;
-  }
-  const head = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex" };
-  if (pathname === "/stats/export.json") {
-    res.writeHead(200, { ...head, "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="meow-type-stats-${new Date().toISOString().slice(0, 10)}.json"` });
-    res.end(JSON.stringify(exportAll())); return;
-  }
-  res.writeHead(200, { ...head, "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'" });
-  res.end(renderStatsPage());
 }
 
 server.listen(PORT, HOST, () => console.log(`喵打伺服器在 http://${HOST}:${server.address().port}`));
