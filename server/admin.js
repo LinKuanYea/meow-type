@@ -1,11 +1,12 @@
-// 管理頁 /admin：統計、Google 登入設定、帳號與管理員、資料匯出。以後管理相關的都放這裡。
+// 管理頁 /admin：統計、排行榜與分享（標記不雅、放行可疑）、Google 登入設定、帳號與管理員、資料匯出。以後管理相關的都放這裡。
 // 登入有兩種：
 //   1. 用 Google 帳號登入喵打，且這個帳號被設成管理員（建議）
 //   2. 密碼（ADMIN_PASSWORD，沒設定就用 STATS_PASSWORD）→ 管理員 cookie（HttpOnly、SameSite=Strict、只送到 /admin）
 //      管理員可以停用密碼登入；萬一 Google 登入壞掉，伺服器 .env 設 ADMIN_PASSWORD_RESCUE=1 重新部署就能暫時用密碼登入
 // 防護：密碼錯太多次會擋一陣子；所有 POST 都檢查 Origin 是同一個網站；用戶端密鑰只寫不讀（畫面上只顯示結尾 4 碼）
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { renderStatsBody, exportAll, getSetting, setSetting, dbh } from "./stats.js";
+import { renderStatsBody, exportAll, getSetting, setSetting, dbh, FLAG, RULE, HIDDEN_NAME } from "./stats.js";
+import { CAT_NAME, LEN_NAME } from "../shared/bank.js";
 import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
@@ -79,7 +80,7 @@ code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-br
 </style></head><body>${body}</body></html>`);
 }
 function shell(res, cur, inner, msg, me) {
-  const tabs = [["/admin", "統計"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main>`);
@@ -88,6 +89,8 @@ const redirect = (res, to, headers = {}) => { res.writeHead(303, { Location: to,
 const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 登入設定，登入按鈕會隱藏。", bad: "格式不對，沒有儲存。", origin: "請從管理頁送出（來源不對）。",
   granted: "已設為管理員。", revoked: "已取消管理員。", last: "至少要留一位管理員（密碼登入停用時）。", pwoff: "已停用密碼登入，之後只能用管理員的 Google 帳號登入管理頁。",
   pwon: "已重新啟用密碼登入。", banned: "已停權：這個帳號的排行榜成績和分享連結都不再顯示，也不能再上榜、分享或改暱稱。", unbanned: "已恢復，成績和分享會重新顯示。",
+  hidden: "已標記暱稱不雅：成績保留、名次不變，暱稱改顯示「" + HIDDEN_NAME + "」。", unhidden: "已取消標記，暱稱重新顯示。",
+  approved: "已放行：這筆成績會出現在排行榜。", unapproved: "已取消放行：這筆成績不再出現在排行榜。",
   banadmin: "管理員不能停權，請先取消管理員。", needgoogle: "要先用管理員的 Google 帳號登入管理頁，才能停用密碼登入（避免把自己鎖在外面）。", nopw: "伺服器沒有設定管理密碼，不能啟用密碼登入。" };
 const ERRS = ["bad", "origin", "last", "needgoogle", "nopw", "banadmin"];
 
@@ -148,6 +151,29 @@ export async function handleAdmin(req, res, url) {
       console.warn(`[管理] ${act === "grant" ? "設為" : "取消"}管理員：使用者 #${id}`);
       redirect(res, act === "revoke" && me.kind === "google" && me.user.id === id ? "/admin" : `/admin/users?m=${act === "grant" ? "granted" : "revoked"}`); return true;
     }
+    if (p === "/admin/scores") {
+      const f = await readForm(req);
+      const kind = f?.get("kind") === "share" ? "share" : "score", act = f?.get("action"), all = f?.get("all") === "1";
+      const back = ["flag", "hidden", "approved"].includes(f?.get("f")) ? `&f=${f.get("f")}` : "";
+      const table = kind === "share" ? "shares" : "scores";
+      const id = kind === "share" ? String(f?.get("id") || "") : Number(f?.get("id"));
+      const r = id !== "" && dbh().prepare(`SELECT id, cid, user_id, ${kind === "share" ? "'' AS flag" : "flag"} FROM ${table} WHERE id=?`).get(id);
+      const ok = r && (["hide", "unhide"].includes(act) || (kind === "score" && ["approve", "unapprove"].includes(act) && r.flag));
+      if (!ok) { redirect(res, "/admin/scores?m=bad" + back); return true; }
+      if (act === "hide" || act === "unhide") {
+        const v = act === "hide" ? 1 : 0;
+        if (all) {
+          // 同一個人：有登入看帳號，沒登入看瀏覽器代號（cid）；成績和分享一起
+          const [col, key] = r.user_id != null ? ["user_id", r.user_id] : ["cid", r.cid];
+          for (const t of ["scores", "shares"]) dbh().prepare(`UPDATE ${t} SET name_hidden=? WHERE ${col}=?`).run(v, key);
+        } else dbh().prepare(`UPDATE ${table} SET name_hidden=? WHERE id=?`).run(v, id);
+        console.warn(`[管理] ${v ? "標記暱稱不雅" : "取消標記"}：${kind === "share" ? "分享" : "成績"} ${id}${all ? "（同一人全部）" : ""}`);
+        redirect(res, `/admin/scores?m=${act === "hide" ? "hidden" : "unhidden"}${back}`); return true;
+      }
+      dbh().prepare("UPDATE scores SET approved=? WHERE id=?").run(act === "approve" ? 1 : 0, id);
+      console.warn(`[管理] ${act === "approve" ? "放行" : "取消放行"}可疑成績 #${id}`);
+      redirect(res, `/admin/scores?m=${act === "approve" ? "approved" : "unapproved"}${back}`); return true;
+    }
     if (p === "/admin/security") {
       const f = await readForm(req), act = f?.get("action");
       if (act === "disable_password") {
@@ -184,6 +210,7 @@ export async function handleAdmin(req, res, url) {
   const m = MSGS[url.searchParams.get("m")];
   const msg = m ? { text: m, err: ERRS.includes(url.searchParams.get("m")) } : null;
   if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg, me); return true; }
+  if (p === "/admin/scores") { shell(res, "/admin/scores", scoresPage(url), msg, me); return true; }
   if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
   if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
   if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg, me); return true; }
@@ -204,13 +231,49 @@ function loginForm(req, err) {
   return `<main style="max-width:460px;margin:10vh auto"><h1>喵打管理</h1>${err ? `<div class="msg err" role="alert">${esc(err)}</div>` : ""}${g}${pw}</main>`;
 }
 
+const tw = (ts) => (ts ? new Date(ts + 8 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "—");
+const pct = (x) => (x == null ? "—" : Math.round(x * 100) + "%");
+
+function scoresPage(url) {
+  const f = url.searchParams.get("f") || "";
+  const where = { flag: "s.flag<>''", hidden: "s.name_hidden=1", approved: "s.approved=1" }[f] || "1";
+  const db = dbh();
+  const scores = db.prepare(`SELECT s.*, u.nick AS unick, u.banned AS ubanned FROM scores s LEFT JOIN users u ON u.id = s.user_id
+    WHERE ${where} ORDER BY s.id DESC LIMIT 200`).all();
+  const shares = f ? [] : db.prepare(`SELECT h.*, u.nick AS unick, u.banned AS ubanned FROM shares h LEFT JOIN users u ON u.id = h.user_id ORDER BY h.ts DESC LIMIT 100`).all();
+  const cnt = db.prepare("SELECT SUM(flag<>'') fl, SUM(flag<>'' AND approved=0) wait, SUM(name_hidden) hid, SUM(approved) ap FROM scores").get();
+  const back = f ? `<input type="hidden" name="f" value="${esc(f)}">` : "";
+  const form = (kind, id, act, label, cls = "", extra = "") => `<form method="post" action="/admin/scores" class="inl"><input type="hidden" name="kind" value="${kind}"><input type="hidden" name="id" value="${esc(id)}"><input type="hidden" name="action" value="${act}">${back}${extra}<button type="submit" class="small ${cls}">${label}</button></form>`;
+  const allBox = (kind, r) => `<label class="n"><input type="checkbox" name="all" value="1"> 同一人全部${r.user_id != null ? "（這個帳號）" : "（同一台瀏覽器）"}</label> `;
+  const nameCell = (r) => `${esc(r.user_id != null && r.unick ? r.unick : r.name)}${r.user_id != null ? ' <span class="n">（登入' + (r.ubanned ? "・停權" : "") + "）</span>" : ' <span class="n">（沒登入）</span>'}${r.name_hidden ? '<br><span class="no">已標記不雅</span>' : ""}`;
+  const hideBtn = (kind, r) => (r.name_hidden ? form(kind, r.id, "unhide", "取消標記", "sec") : form(kind, r.id, "hide", "標記暱稱不雅", "warn", allBox(kind, r)));
+  const status = (r) => (!r.flag ? '<span class="ok">上榜</span>'
+    : `${r.approved ? '<span class="ok">已放行</span>' : '<span class="no">可疑・沒上榜</span>'}<br><span class="n">${r.flag.split(",").map((x) => FLAG[x] || esc(x)).join("、")}</span>`);
+  const apBtn = (r) => (!r.flag ? "" : r.approved ? form("score", r.id, "unapprove", "取消放行", "sec") : form("score", r.id, "approve", "放行"));
+  const what = (r) => `${CAT_NAME[r.cat] || esc(r.cat)}・${LEN_NAME[r.len] || esc(r.len)}・${r.mode === "t60" ? "1 分鐘" : "打完一題"}`;
+  const speed = (r) => `${Math.round(r.speed * 10) / 10} ${r.cat === "zh" ? "字/分" : "WPM"}`;
+  const tabs = [["", "全部"], ["flag", `可疑（${cnt.fl || 0}，待處理 ${cnt.wait || 0}）`], ["hidden", `已標記不雅（${cnt.hid || 0}）`], ["approved", `已放行（${cnt.ap || 0}）`]];
+  return `<h1>排行榜與分享</h1>
+<p>暱稱不雅：按「標記暱稱不雅」，成績<b>不會刪除</b>、名次不變，只是排行榜和分享頁的暱稱改顯示「${HIDDEN_NAME}」。勾「同一人全部」會把這個人所有的成績和分享一起標記。有登入的人，也可以到<a href="/admin/users">帳號與管理員</a>停權（暱稱不雅是停權的理由，暱稱欄位旁邊都有寫）。</p>
+<p>可疑成績：送出時伺服器會重播按鍵紀錄驗算；太快、按鍵間隔太短、節奏太規律、一次湧進很多字、或前端成績和驗算不同，就標成可疑。可疑成績<b>會保留</b>，但不上排行榜、不能分享。你看過覺得沒問題，可以按「放行」讓它上榜。</p>
+<p class="row">${tabs.map(([k, t]) => `<a href="/admin/scores${k ? "?f=" + k : ""}"${k === f ? ' aria-current="page"' : ""} class="btnlink${k === f ? "" : " sec"}">${t}</a>`).join(" ")}</p>
+<h2>排行榜成績</h2>
+<div class="wrap"><table><thead><tr><th>#</th><th>時間</th><th>暱稱</th><th>題目</th><th>規則</th><th>速度</th><th>正確率</th><th>狀態</th><th></th></tr></thead><tbody>
+${scores.map((r) => `<tr><td>${r.id}</td><td>${tw(r.ts)}</td><td>${nameCell(r)}</td><td>${what(r)}</td><td>${RULE[r.rule] || esc(r.rule)}</td><td>${speed(r)}</td><td>${pct(r.acc)}</td><td>${status(r)}</td><td>${hideBtn("score", r)} ${apBtn(r)}</td></tr>`).join("")
+  || '<tr><td colspan="9">沒有成績。</td></tr>'}</tbody></table></div>
+<p class="n">最多列最近 200 筆。</p>
+${f ? "" : `<h2>分享連結</h2>
+<div class="wrap"><table><thead><tr><th>連結</th><th>時間</th><th>暱稱</th><th>題目</th><th>速度</th><th>被打開</th><th>接受挑戰</th><th></th></tr></thead><tbody>
+${shares.map((r) => `<tr><td><a href="/c/${esc(r.id)}" target="_blank" rel="noopener">${esc(r.id)}</a></td><td>${tw(r.ts)}</td><td>${nameCell(r)}</td><td>${what(r)}</td><td>${speed(r)}</td><td>${r.views}</td><td>${r.accepts}</td><td>${hideBtn("share", r)}</td></tr>`).join("")
+  || '<tr><td colspan="8">還沒有分享。</td></tr>'}</tbody></table></div><p class="n">最多列最近 100 筆。</p>`}`;
+}
+
 function usersPage(me) {
   const users = dbh().prepare(`SELECT u.id, u.email, u.nick, u.nick_set_at, u.created, u.last_login, u.is_admin, u.banned, u.banned_at, u.ban_reason,
       (SELECT COUNT(*) FROM runs r WHERE r.user_id=u.id AND r.finished=1) runs,
       (SELECT COUNT(*) FROM scores s WHERE s.user_id=u.id) scores,
       (SELECT COUNT(*) FROM shares h WHERE h.user_id=u.id) shares
     FROM users u ORDER BY u.is_admin DESC, u.banned DESC, u.last_login DESC LIMIT 1000`).all();
-  const tw = (ts) => (ts ? new Date(ts + 8 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "—");
   const admins = users.filter((u) => u.is_admin).length, pwOn = passwordAllowed();
   const form = (u, act, label, cls = "", extra = "") => `<form method="post" action="/admin/users" class="inl"><input type="hidden" name="id" value="${u.id}"><input type="hidden" name="action" value="${act}">${extra}<button type="submit" class="small ${cls}">${label}</button></form>`;
   const btn = (u) => (u.is_admin ? form(u, "revoke", "取消管理員", "sec") : u.banned ? form(u, "unban", "恢復", "sec")

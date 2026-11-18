@@ -350,6 +350,8 @@ ta.addEventListener("beforeinput", (e) => {
 });
 ta.addEventListener("compositionstart", () => {
   composing = true;
+  // 開始組字就開始計時（不然注音整句組好再按 Enter，時間幾乎是 0，速度會變成好幾百）
+  if (R && !R.ended && !R.start) event([0, "c"]);
   // 程式題的字串裡可能有中文：下一個要打的字是中文就不提醒
   const next = R && R.ty.text[R.ty.typed.length] || "";
   const wantCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(next);

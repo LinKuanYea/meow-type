@@ -45,6 +45,10 @@ export function initStats(file) {
   addCol("users", "banned", "INTEGER NOT NULL DEFAULT 0"); // v0.7：停權（不雅暱稱等），排行榜與分享都不顯示
   addCol("users", "banned_at", "INTEGER");
   addCol("users", "ban_reason", "TEXT");
+  // v0.8：管理員可以把成績／分享標記「暱稱不雅」（不刪除，只把暱稱遮起來）；可疑成績可以人工放行
+  addCol("scores", "name_hidden", "INTEGER NOT NULL DEFAULT 0");
+  addCol("scores", "approved", "INTEGER NOT NULL DEFAULT 0");
+  addCol("shares", "name_hidden", "INTEGER NOT NULL DEFAULT 0");
   // v0.6：管理頁的設定（例如 Google 登入的用戶端），存在資料庫，改了馬上生效，不用重新部署
   db.exec("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT, updated INTEGER NOT NULL)");
   db.exec("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, ts)");
@@ -97,7 +101,7 @@ export function getShare(id, count) {
   const r = db.prepare("SELECT * FROM shares WHERE id=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))").get(id);
   if (!r) return null;
   if (count) db.prepare("UPDATE shares SET views=views+1 WHERE id=?").run(id);
-  return { id: r.id, ts: r.ts, name: r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
+  return { id: r.id, ts: r.ts, name: r.name_hidden ? HIDDEN_NAME : r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
 }
 export function shareEvent(id, kind) {
   const col = { accept: "accepts", win: "wins", lose: "loses" }[kind];
@@ -113,11 +117,14 @@ export function periodStart(p, now = Date.now()) {
   return day - TZ;
 }
 /** 排行榜：每人只留最好的一次。登入的人以帳號算（換電腦也是同一個人），沒登入的以瀏覽器編號算 */
+export const HIDDEN_NAME = "（暱稱不雅，已隱藏）";
+const SHOWN = "(flag='' OR approved=1) AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))";
 export function board(c, l, m, p, me, limit = 20, meUser = null) {
-  // 登入的人顯示目前的帳號暱稱（改暱稱後排行榜跟著變）
-  const rows = db.prepare(`SELECT COALESCE((SELECT nick FROM users u WHERE u.id = user_id), name) AS name, speed, acc, rule, cid, ts, id, specs, user_id FROM (
+  // 登入的人顯示目前的帳號暱稱（改暱稱後排行榜跟著變）；被標記不雅的成績遮住暱稱
+  const rows = db.prepare(`SELECT CASE WHEN name_hidden=1 THEN '${HIDDEN_NAME}' ELSE COALESCE((SELECT nick FROM users u WHERE u.id = user_id), name) END AS name,
+      speed, acc, rule, cid, ts, id, specs, user_id FROM (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY COALESCE('u' || user_id, cid) ORDER BY speed DESC, ts ASC) rn FROM scores
-      WHERE cat=? AND len=? AND mode=? AND flag='' AND ts>=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1)))
+      WHERE cat=? AND len=? AND mode=? AND ts>=? AND ${SHOWN})
       WHERE rn=1 ORDER BY speed DESC, ts ASC LIMIT ?`)
     .all(c, l, m, periodStart(p), limit);
   const parse = (x) => { try { return x ? JSON.parse(x) : null; } catch { return null; } };
@@ -126,7 +133,7 @@ export function board(c, l, m, p, me, limit = 20, meUser = null) {
 }
 /** 所有設定的排行榜：每種「題庫×長度×模式」的前幾名（依題庫、長度、模式排序） */
 export function boards(p, me, limit = 5, meUser = null) {
-  const combos = db.prepare("SELECT DISTINCT cat, len, mode FROM scores WHERE flag='' AND ts>=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))").all(periodStart(p));
+  const combos = db.prepare(`SELECT DISTINCT cat, len, mode FROM scores WHERE ts>=? AND ${SHOWN}`).all(periodStart(p));
   const ord = (r) => CATS.indexOf(r.cat) * 100 + LENS.indexOf(r.len) * 10 + (r.mode === "t60" ? 1 : 0);
   return combos.sort((a, b) => ord(a) - ord(b)).map((r) => ({ c: r.cat, l: r.len, m: r.mode, rows: board(r.cat, r.len, r.mode, p, me, limit, meUser).map(({ id, ...x }) => x) }));
 }
@@ -177,8 +184,8 @@ const pct = (x) => (x == null ? "—" : Math.round(x * 100) + "%");
 const r1 = (x) => (x == null ? "—" : (Math.round(x * 10) / 10).toString());
 const table = (head, rows) => `<table><thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${head.length}">還沒有資料</td></tr>`}</tbody></table>`;
 const dayExpr = "date((ts/1000) + 8*3600, 'unixepoch')";
-const FLAG = { burst: "一次湧進很多字", "too-fast-keys": "按鍵間隔太短", "too-regular": "節奏太規律", "too-fast": "速度超過上限", mismatch: "前端成績和驗算不同" };
-const RULE = { block: "擋下", back: "要倒退修", free: "可以帶錯" };
+export const FLAG = { burst: "一次湧進很多字", "too-fast-keys": "按鍵間隔太短", "too-regular": "節奏太規律", "too-fast": "速度超過上限", mismatch: "前端成績和驗算不同" };
+export const RULE = { block: "擋下", back: "要倒退修", free: "可以帶錯" };
 
 /** 統計（放在管理頁裡） */
 export function renderStatsBody() {

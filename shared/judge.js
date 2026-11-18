@@ -11,6 +11,7 @@
 //   [t, "t"]              Tab（補空白到 4 的倍數）
 //   [t, "b"]              倒退一個字
 //   [t, "w"]              倒退一個詞（Ctrl/Option + Backspace）
+//   [t, "c"]              開始用輸入法選字（只用來開始計時：注音一次組好很多字再按 Enter，時間要從開始組字算起）
 
 export const RULES = ["block", "back", "free"];
 export const MAX_AHEAD = 10;
@@ -54,6 +55,7 @@ export class Typist {
     if (k === "i") r = this._insert(t, String(ev[2] ?? ""), !!ev[3]);
     else if (k === "t") r = this._tab(t);
     else if (k === "b" || k === "w") this._back(t, k === "w");
+    // "c"（開始選字）：不改變打字內容，只讓計時從這裡開始
     if (this.chunkDone() && this.onChunkDone) this.onChunkDone(this);
     return r;
   }
@@ -135,7 +137,7 @@ export function replay({ texts, rule, cat, events, limitMs, endMs }) {
   let prev = -1;
   for (const ev of events) {
     if (!Array.isArray(ev) || typeof ev[0] !== "number" || !Number.isFinite(ev[0]) || ev[0] < prev || ev[0] < 0) return { ok: false, reason: "時間順序不對" };
-    if (!["i", "t", "b", "w"].includes(ev[1])) return { ok: false, reason: "未知的事件" };
+    if (!["i", "t", "b", "w", "c"].includes(ev[1])) return { ok: false, reason: "未知的事件" };
     if (ev[1] === "i" && (typeof ev[2] !== "string" || ev[2].length > 40)) return { ok: false, reason: "輸入太長" };
     if (limitMs && ev[0] > limitMs + 50) break;
     prev = ev[0];

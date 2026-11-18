@@ -117,6 +117,15 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   ok(replay({ texts: [text], rule: "back", cat: "cpp", events: paste, limitMs: null }).flags.includes("burst"), "一次湧進一大段：標成可疑");
 }
 {
+  // 中文：注音組好一整句才按 Enter。計時要從開始組字（"c"）算起，不是從第一次送出字
+  const spec = { c: "zh", l: "sent", i: [0] }, text = textOf(spec);
+  const late = replay({ texts: [text], rule: "back", cat: "zh", events: [[0, "i", text, 1]], limitMs: null });
+  ok(late.ok && late.flags.includes("too-fast"), "沒有組字事件、一次送出整句：速度爆表，標成可疑 " + Math.round(late.sum.speed));
+  const ime = replay({ texts: [text], rule: "back", cat: "zh", events: [[0, "c"], [9000, "i", text, 1]], limitMs: null });
+  ok(ime.ok && !ime.flags.includes("too-fast") && Math.abs(ime.sum.speed - text.length / 0.15) < 1, "從開始組字計時：速度正常 " + Math.round(ime.sum.speed));
+  ok(!replay({ texts: [text], rule: "back", cat: "zh", events: [[0, "x"], [9000, "i", text, 1]], limitMs: null }).ok, "未知的事件：不收");
+}
+{
   // 1 分鐘、好幾段
   const texts = [0, 1, 2, 3, 4, 5].map((k) => itemText(BANK.en.sent[k]));
   const { evs } = human(texts, { seed: 5, gap: [60, 200], limitMs: 60000 });
@@ -298,6 +307,33 @@ try {
   ok((await (await fetch(base + "/api/me", { headers: GC })).json()).user.banned === true, "/api/me 告訴前端被停權");
   ok((await post("/admin/users", `id=${uid}&action=unban`, AC2)).headers.get("location").includes("m=unbanned"), "恢復");
   ok((await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "新名字"), "恢復後排行榜重新顯示");
+  // 排行榜與分享：標記暱稱不雅（不刪除）、放行可疑成績
+  const sp = await (await get("/admin/scores", AC2)).text();
+  ok(sp.includes("排行榜與分享") && sp.includes("小橘") && sp.includes(sh.id), "管理頁列出排行榜成績和分享");
+  const idOf = (html, name) => Number(new RegExp(`<tr><td>(\\d+)</td><td>[^<]*</td><td>${name}`).exec(html)?.[1]);
+  const orange = idOf(sp, "小橘"), botId = idOf(sp, "機器人");
+  ok(orange > 0 && botId > 0, "找得到成績編號");
+  const before = (await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).findIndex((r) => r.name === "小橘");
+  ok((await post("/admin/scores", `kind=score&id=${orange}&action=hide&all=1`, AC2)).headers.get("location").includes("m=hidden"), "標記暱稱不雅（同一台瀏覽器全部）");
+  const bh = await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json();
+  ok(!bh.some((r) => r.name === "小橘") && bh[before]?.name === "（暱稱不雅，已隱藏）", "標記後成績還在、名次不變，暱稱遮起來");
+  ok((await (await get("/admin/scores?f=hidden", AC2)).text()).includes("小橘"), "管理頁看得到原本的暱稱");
+  ok((await post("/admin/scores", `kind=score&id=${orange}&action=unhide&all=1`, AC2)).headers.get("location").includes("m=unhidden"), "取消標記");
+  ok((await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "小橘"), "取消後暱稱重新顯示");
+  const shh = await post("/admin/scores", `kind=share&id=${sh.id}&action=hide&all=1`, AC2);
+  ok(String(shh.headers.get("location")).includes("m=hidden"), "分享：同一人全部標記 " + shh.status + (shh.status >= 400 ? await shh.text() : ""));
+  ok((await (await get("/api/share/" + sh.id)).json()).name === "（暱稱不雅，已隱藏）", "分享頁的暱稱遮起來");
+  ok(!(await (await get("/c/" + sh.id)).text()).includes("分享貓"), "挑戰連結預覽也不顯示");
+  ok(!(await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "小橘"), "同一人的排行榜成績也一起標記");
+  await post("/admin/scores", `kind=share&id=${sh.id}&action=unhide&all=1`, AC2);
+  ok((await (await get("/api/share/" + sh.id)).json()).name === "分享貓", "同一人全部取消");
+  ok((await post("/admin/scores", `kind=share&id=${sh.id}&action=approve`, AC2)).headers.get("location").includes("m=bad"), "分享不能放行（只有可疑成績可以）");
+  ok((await (await get("/admin/scores?f=flag", AC2)).text()).includes("按鍵間隔太短"), "可疑清單列出原因");
+  ok((await post("/admin/scores", `kind=score&id=${botId}&action=approve`, AC2)).headers.get("location").includes("m=approved"), "放行可疑成績");
+  ok((await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "機器人"), "放行後上排行榜");
+  await post("/admin/scores", `kind=score&id=${botId}&action=unapprove`, AC2);
+  ok(!(await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "機器人"), "取消放行後下榜");
+  eq((await fetch(base + "/admin/scores", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...AC2 }, body: `kind=score&id=${orange}&action=hide`, redirect: "manual" })).headers.get("location"), "/admin?m=origin", "沒有 Origin 的標記要擋");
   await fetch(base + "/admin/logout", { method: "POST", headers: { ...O, ...AC2 }, redirect: "manual" });
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;
