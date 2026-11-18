@@ -200,3 +200,9 @@ p.vs.win{color:var(--grass)}
 .loginhint{flex-basis:100%;margin:0;font-size:14px;color:var(--todo)}
 .loginhint .link{font-size:14px;font-weight:700}
 .fig{position:relative}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+/* ---------- 隱私權政策、服務條款 ---------- */
+.doc{max-width:760px}.doc h1{font:700 32px/1.2 "Noto Sans TC",sans-serif;color:var(--ink);margin-top:8px}.doc h2{font-size:20px;margin:28px 0 8px}
+.doc a{color:var(--gin)}.doc li{margin:4px 0}
+table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{border:1px solid var(--line);padding:8px;vertical-align:top;text-align:left}.pol th{background:var(--soft)}
+@media(max-width:600px){.pol thead{display:none}.pol tr{display:grid;border:1px solid var(--line);margin-bottom:8px}.pol td{border:0}}
+.ver a{color:var(--gin);font-size:13px}

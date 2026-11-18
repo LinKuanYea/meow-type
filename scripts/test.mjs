@@ -224,6 +224,8 @@ try {
   eq((await get("/api/me/history")).status, 401, "沒登入看不到個人頁資料");
   eq((await fetch(base + "/api/me/nick", { method: "POST", headers: H, body: JSON.stringify({ nick: "新名字" }) })).status, 200, "改暱稱");
   eq((await fetch(base + "/api/me/nick", { method: "POST", headers: H, body: JSON.stringify({ nick: "白癡" }) })).status, 400, "改暱稱也擋不適合的字");
+  const pv = await (await get("/privacy")).text(), tm = await get("/terms");
+  ok(pv.includes("隱私權政策") && pv.includes("openid") && tm.status === 200, "隱私權政策與服務條款");
   ok((await get("/me")).status === 200 && (await get("/auth-done.js")).status === 200 && (await get("/account.js")).status === 200, "個人頁與登入程式");
   await fetch(base + "/api/logout", { method: "POST", headers: H, body: "{}" });
   ok((await (await fetch(base + "/api/me", { headers: H })).json()).user === null, "登出後 session 失效");

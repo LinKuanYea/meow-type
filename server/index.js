@@ -79,6 +79,7 @@ export const server = http.createServer(async (req, res) => {
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
     if (p === "/me") p = "/me.html";
+    if (p === "/privacy" || p === "/terms") p += ".html";
     let base = CLIENT_DIR, rel = p;
     if (p.startsWith("/shared/")) { base = SHARED_DIR; rel = p.slice("/shared".length); }
     const file = path.resolve(base, "." + rel);
