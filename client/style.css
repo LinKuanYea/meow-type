@@ -206,3 +206,5 @@ p.vs.win{color:var(--grass)}
 table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{border:1px solid var(--line);padding:8px;vertical-align:top;text-align:left}.pol th{background:var(--soft)}
 @media(max-width:600px){.pol thead{display:none}.pol tr{display:grid;border:1px solid var(--line);margin-bottom:8px}.pol td{border:0}}
 .ver a{color:var(--gin);font-size:13px}
+.nickrule{flex-basis:100%;margin:0;font-size:13px;color:var(--todo)}.nickrule a{color:var(--gin)}
+.msg.err{background:var(--badbg);color:var(--ink);padding:10px 14px;border-radius:10px;margin-bottom:12px}

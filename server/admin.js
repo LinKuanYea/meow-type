@@ -1,9 +1,12 @@
-// 管理頁 /admin：統計、Google 登入設定、資料匯出。以後管理相關的都放這裡。
-// 登入：密碼（ADMIN_PASSWORD，沒設定就用 STATS_PASSWORD）→ 管理員 cookie（HttpOnly、SameSite=Strict、只送到 /admin）
+// 管理頁 /admin：統計、Google 登入設定、帳號與管理員、資料匯出。以後管理相關的都放這裡。
+// 登入有兩種：
+//   1. 用 Google 帳號登入喵打，且這個帳號被設成管理員（建議）
+//   2. 密碼（ADMIN_PASSWORD，沒設定就用 STATS_PASSWORD）→ 管理員 cookie（HttpOnly、SameSite=Strict、只送到 /admin）
+//      管理員可以停用密碼登入；萬一 Google 登入壞掉，伺服器 .env 設 ADMIN_PASSWORD_RESCUE=1 重新部署就能暫時用密碼登入
 // 防護：密碼錯太多次會擋一陣子；所有 POST 都檢查 Origin 是同一個網站；用戶端密鑰只寫不讀（畫面上只顯示結尾 4 碼）
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { renderStatsBody, exportAll, getSetting, setSetting, dbh } from "./stats.js";
-import { oauthConfig, googleReady } from "./auth.js";
+import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
 const SESSION_MS = 12 * 3600000;
@@ -12,8 +15,10 @@ const fails = new Map(); // IP → { n, until }
 const sha = (s) => createHash("sha256").update(String(s)).digest();
 const hex = (s) => sha(s).toString("hex");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-export const adminEnabled = () => !!PASSWORD;
-if (!PASSWORD) console.warn("[管理] 沒有設定 ADMIN_PASSWORD 或 STATS_PASSWORD，管理頁 /admin 不會開放。");
+const RESCUE = process.env.ADMIN_PASSWORD_RESCUE === "1";
+const adminCount = () => dbh().prepare("SELECT COUNT(*) n FROM users WHERE is_admin=1").get().n;
+export const passwordAllowed = () => !!PASSWORD && (getSetting("admin_password_disabled") !== "1" || RESCUE);
+if (RESCUE) console.warn("[管理] ADMIN_PASSWORD_RESCUE=1：暫時允許密碼登入管理頁，處理完請拿掉。");
 
 function cookieOf(req, name) {
   for (const part of String(req.headers.cookie || "").split(";")) {
@@ -24,12 +29,17 @@ function cookieOf(req, name) {
 }
 const isHttps = (req) => String(req.headers["x-forwarded-proto"] || "").includes("https") || String(req.headers["cf-visitor"] || "").includes("https");
 const adminCookie = (req, v, age) => `mt_admin=${v}; Path=/admin; Max-Age=${age}; HttpOnly; SameSite=Strict${isHttps(req) ? "; Secure" : ""}`;
-function authed(req) {
+/** 目前是誰在用管理頁：{ kind: "google", user } 或 { kind: "password" } 或 null */
+function who(req) {
+  const u = currentUser(req);
+  if (u && u.is_admin) return { kind: "google", user: u };
   const t = cookieOf(req, "mt_admin");
-  if (!t) return false;
-  const exp = sessions.get(hex(t));
-  if (!exp || exp < Date.now()) { sessions.delete(hex(t)); return false; }
-  return true;
+  if (t && passwordAllowed()) {
+    const exp = sessions.get(hex(t));
+    if (exp && exp > Date.now()) return { kind: "password" };
+    sessions.delete(hex(t));
+  }
+  return null;
 }
 function sameOrigin(req) {
   const o = String(req.headers.origin || "");
@@ -62,52 +72,94 @@ p.n,.n{color:#8a735f;font-size:13px}a{color:#c0641a}
 label{display:block;font-weight:700;margin:14px 0 4px}input[type=text],input[type=password],input[type=url]{font:inherit;font-size:16px;width:100%;max-width:640px;box-sizing:border-box;min-height:42px;padding:0 10px;border:2px solid #ecdcc8;border-radius:10px}
 input:focus-visible,button:focus-visible{outline:3px solid #d9741a;outline-offset:1px}
 button{font:inherit;font-weight:700;min-height:42px;padding:0 16px;border-radius:10px;border:2px solid #d9741a;background:#d9741a;color:#fff;cursor:pointer}
-button.sec,a.btnlink{background:#fff;color:#d9741a}a.btnlink{font-weight:700;min-height:42px;padding:0 16px;border-radius:10px;border:2px solid #d9741a;display:inline-flex;align-items:center;text-decoration:none}header button{min-height:34px;background:none;border-color:#ffd9b0;color:#ffd9b0}
+button.sec,a.btnlink{background:#fff;color:#d9741a}button.small{min-height:32px;padding:0 10px;font-size:13px}button.warn{background:#c0392b;border-color:#c0392b}form.inl{display:inline-flex;gap:4px;align-items:center;margin:2px 0}
+input.rsn{font:inherit;font-size:13px;min-height:32px;width:9em;padding:0 6px;border:2px solid #ecdcc8;border-radius:8px}tr.bn td{background:#fdf0ee}td:last-child{white-space:normal;min-width:15em}.who{color:#ffd9b0;font-size:13px}a.btnlink{font-weight:700;min-height:42px;padding:0 16px;border-radius:10px;border:2px solid #d9741a;display:inline-flex;align-items:center;text-decoration:none}header button{min-height:34px;background:none;border-color:#ffd9b0;color:#ffd9b0}
 .ok{color:#2d7a1f;font-weight:700}.no{color:#c0392b;font-weight:700}.msg{padding:10px 14px;border-radius:10px;background:#e3f4dc;margin:10px 0;max-width:820px}.msg.err{background:#fde2df}
 code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-break:break-all}ol li{margin:6px 0}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 </style></head><body>${body}</body></html>`);
 }
-function shell(res, cur, inner, msg) {
-  const tabs = [["/admin", "統計"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+function shell(res, cur, inner, msg, me) {
+  const tabs = [["/admin", "統計"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
-<form method="post" action="/admin/logout"><button type="submit">登出</button></form></header>
+<form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main>`);
 }
 const redirect = (res, to, headers = {}) => { res.writeHead(303, { Location: to, "Cache-Control": "no-store", ...headers }); res.end(); };
-const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 登入設定，登入按鈕會隱藏。", bad: "格式不對，沒有儲存。", origin: "請從管理頁送出（來源不對）。" };
+const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 登入設定，登入按鈕會隱藏。", bad: "格式不對，沒有儲存。", origin: "請從管理頁送出（來源不對）。",
+  granted: "已設為管理員。", revoked: "已取消管理員。", last: "至少要留一位管理員（密碼登入停用時）。", pwoff: "已停用密碼登入，之後只能用管理員的 Google 帳號登入管理頁。",
+  pwon: "已重新啟用密碼登入。", banned: "已停權：這個帳號的排行榜成績和分享連結都不再顯示，也不能再上榜、分享或改暱稱。", unbanned: "已恢復，成績和分享會重新顯示。",
+  banadmin: "管理員不能停權，請先取消管理員。", needgoogle: "要先用管理員的 Google 帳號登入管理頁，才能停用密碼登入（避免把自己鎖在外面）。", nopw: "伺服器沒有設定管理密碼，不能啟用密碼登入。" };
+const ERRS = ["bad", "origin", "last", "needgoogle", "nopw", "banadmin"];
 
 /** /admin 底下的請求；回傳 true 表示處理了 */
 export async function handleAdmin(req, res, url) {
   const p = url.pathname;
   if (!(p === "/admin" || p.startsWith("/admin/"))) return false;
-  if (!PASSWORD) { page(res, "喵打管理", `<main><h1>管理頁未開放</h1><p>請在伺服器的 .env 設定 <code>ADMIN_PASSWORD</code>（或 <code>STATS_PASSWORD</code>）後重新部署。</p></main>`, 404); return true; }
+  if (!PASSWORD && !adminCount()) { page(res, "喵打管理", `<main><h1>管理頁未開放</h1><p>請在伺服器的 .env 設定 <code>ADMIN_PASSWORD</code>（或 <code>STATS_PASSWORD</code>）後重新部署。</p></main>`, 404); return true; }
   const ip = String(req.headers["cf-connecting-ip"] || req.socket.remoteAddress || "");
 
   if (p === "/admin/login" && req.method === "POST") {
+    if (!passwordAllowed()) { page(res, "喵打管理", loginForm(req, "密碼登入已停用，請用管理員的 Google 帳號登入。"), 403); return true; }
     const f = fails.get(ip);
-    if (f && f.until > Date.now()) { page(res, "喵打管理", loginForm("密碼錯太多次，請 10 分鐘後再試。"), 429); return true; }
-    if (!sameOrigin(req)) { page(res, "喵打管理", loginForm("請從登入頁送出。"), 403); return true; }
+    if (f && f.until > Date.now()) { page(res, "喵打管理", loginForm(req, "密碼錯太多次，請 10 分鐘後再試。"), 429); return true; }
+    if (!sameOrigin(req)) { page(res, "喵打管理", loginForm(req, "請從登入頁送出。"), 403); return true; }
     const form = await readForm(req);
     const pass = form?.get("password") || "";
     if (!timingSafeEqual(sha(pass), sha(PASSWORD))) {
       const n = (f?.n || 0) + 1;
       fails.set(ip, { n, until: n >= 8 ? Date.now() + 10 * 60000 : 0 });
-      page(res, "喵打管理", loginForm("密碼不對。"), 401); return true;
+      page(res, "喵打管理", loginForm(req, "密碼不對。"), 401); return true;
     }
     fails.delete(ip);
     const tok = randomBytes(32).toString("base64url");
     sessions.set(hex(tok), Date.now() + SESSION_MS);
     redirect(res, "/admin", { "Set-Cookie": adminCookie(req, tok, SESSION_MS / 1000) }); return true;
   }
-  if (!authed(req)) {
+  const me = who(req);
+  if (!me) {
     if (req.method !== "GET") { res.writeHead(401); res.end(); return true; }
-    page(res, "喵打管理", loginForm(), 200); return true;
+    page(res, "喵打管理", loginForm(req), 200); return true;
   }
   if (req.method === "POST") {
     if (!sameOrigin(req)) { redirect(res, "/admin?m=origin"); return true; }
     if (p === "/admin/logout") {
       sessions.delete(hex(cookieOf(req, "mt_admin")));
-      redirect(res, "/admin", { "Set-Cookie": adminCookie(req, "", 0) }); return true;
+      const clear = [adminCookie(req, "", 0)];
+      if (me.kind === "google") clear.push(endSession(req)); // 用 Google 登入的管理員：連喵打的登入一起登出
+      redirect(res, "/admin", { "Set-Cookie": clear }); return true;
+    }
+    if (p === "/admin/users") {
+      const f = await readForm(req);
+      const id = Number(f?.get("id")), act = f?.get("action");
+      const u = Number.isInteger(id) && dbh().prepare("SELECT id, is_admin, email FROM users WHERE id=?").get(id);
+      if (!u || !["grant", "revoke", "ban", "unban"].includes(act)) { redirect(res, "/admin/users?m=bad"); return true; }
+      if (act === "ban") {
+        if (u.is_admin) { redirect(res, "/admin/users?m=banadmin"); return true; }
+        const reason = String(f.get("reason") || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 100);
+        dbh().prepare("UPDATE users SET banned=1, banned_at=?, ban_reason=? WHERE id=?").run(Date.now(), reason || null, id);
+        console.warn(`[管理] 停權：使用者 #${id}`); redirect(res, "/admin/users?m=banned"); return true;
+      }
+      if (act === "unban") {
+        dbh().prepare("UPDATE users SET banned=0, banned_at=NULL, ban_reason=NULL WHERE id=?").run(id);
+        console.warn(`[管理] 恢復：使用者 #${id}`); redirect(res, "/admin/users?m=unbanned"); return true;
+      }
+      if (act === "revoke" && u.is_admin && adminCount() <= 1 && !passwordAllowed()) { redirect(res, "/admin/users?m=last"); return true; }
+      dbh().prepare("UPDATE users SET is_admin=? WHERE id=?").run(act === "grant" ? 1 : 0, id);
+      console.warn(`[管理] ${act === "grant" ? "設為" : "取消"}管理員：使用者 #${id}`);
+      redirect(res, act === "revoke" && me.kind === "google" && me.user.id === id ? "/admin" : `/admin/users?m=${act === "grant" ? "granted" : "revoked"}`); return true;
+    }
+    if (p === "/admin/security") {
+      const f = await readForm(req), act = f?.get("action");
+      if (act === "disable_password") {
+        if (me.kind !== "google" || !adminCount()) { redirect(res, "/admin/users?m=needgoogle"); return true; }
+        setSetting("admin_password_disabled", "1"); sessions.clear();
+        console.warn("[管理] 停用密碼登入"); redirect(res, "/admin/users?m=pwoff"); return true;
+      }
+      if (act === "enable_password") {
+        if (!PASSWORD) { redirect(res, "/admin/users?m=nopw"); return true; }
+        setSetting("admin_password_disabled", ""); console.warn("[管理] 重新啟用密碼登入"); redirect(res, "/admin/users?m=pwon"); return true;
+      }
+      redirect(res, "/admin/users?m=bad"); return true;
     }
     if (p === "/admin/google") {
       const f = await readForm(req);
@@ -130,10 +182,11 @@ export async function handleAdmin(req, res, url) {
     res.writeHead(404); res.end(); return true;
   }
   const m = MSGS[url.searchParams.get("m")];
-  const msg = m ? { text: m, err: ["bad", "origin"].includes(url.searchParams.get("m")) } : null;
-  if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg); return true; }
-  if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg); return true; }
-  if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg); return true; }
+  const msg = m ? { text: m, err: ERRS.includes(url.searchParams.get("m")) } : null;
+  if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg, me); return true; }
+  if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
+  if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
+  if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg, me); return true; }
   if (p === "/admin/export.json") {
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
       "Content-Disposition": `attachment; filename="meow-type-stats-${new Date().toISOString().slice(0, 10)}.json"` });
@@ -142,10 +195,41 @@ export async function handleAdmin(req, res, url) {
   res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }); res.end("找不到這個頁面"); return true;
 }
 
-function loginForm(err) {
-  return `<main style="max-width:420px;margin:10vh auto"><h1>喵打管理</h1>${err ? `<div class="msg err" role="alert">${esc(err)}</div>` : ""}
-<form method="post" action="/admin/login" class="card"><label for="pw">管理密碼</label><input id="pw" type="password" name="password" autocomplete="current-password" required autofocus>
-<div class="row"><button type="submit">登入</button></div></form></main>`;
+function loginForm(req, err) {
+  const u = currentUser(req);
+  const g = googleReady() ? `<div class="card"><p>${u ? `你目前用 <b>${esc(u.email || u.nick || "Google 帳號")}</b> 登入喵打，但這個帳號不是管理員。` : "用被設為管理員的 Google 帳號登入。"}</p>
+<div class="row"><a class="btnlink" href="/auth/google?back=/admin">用 Google 帳號登入</a></div></div>` : "";
+  const pw = passwordAllowed() ? `<form method="post" action="/admin/login" class="card"><label for="pw">管理密碼</label><input id="pw" type="password" name="password" autocomplete="current-password" required${g ? "" : " autofocus"}>
+<div class="row"><button type="submit">用密碼登入</button></div></form>` : `<p class="n">密碼登入已停用。</p>`;
+  return `<main style="max-width:460px;margin:10vh auto"><h1>喵打管理</h1>${err ? `<div class="msg err" role="alert">${esc(err)}</div>` : ""}${g}${pw}</main>`;
+}
+
+function usersPage(me) {
+  const users = dbh().prepare(`SELECT u.id, u.email, u.nick, u.nick_set_at, u.created, u.last_login, u.is_admin, u.banned, u.banned_at, u.ban_reason,
+      (SELECT COUNT(*) FROM runs r WHERE r.user_id=u.id AND r.finished=1) runs,
+      (SELECT COUNT(*) FROM scores s WHERE s.user_id=u.id) scores,
+      (SELECT COUNT(*) FROM shares h WHERE h.user_id=u.id) shares
+    FROM users u ORDER BY u.is_admin DESC, u.banned DESC, u.last_login DESC LIMIT 1000`).all();
+  const tw = (ts) => (ts ? new Date(ts + 8 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "—");
+  const admins = users.filter((u) => u.is_admin).length, pwOn = passwordAllowed();
+  const form = (u, act, label, cls = "", extra = "") => `<form method="post" action="/admin/users" class="inl"><input type="hidden" name="id" value="${u.id}"><input type="hidden" name="action" value="${act}">${extra}<button type="submit" class="small ${cls}">${label}</button></form>`;
+  const btn = (u) => (u.is_admin ? form(u, "revoke", "取消管理員", "sec") : u.banned ? form(u, "unban", "恢復", "sec")
+    : form(u, "grant", "設為管理員") + " " + form(u, "ban", "停權", "warn", `<input type="text" name="reason" placeholder="原因（選填）" maxlength="100" class="rsn" aria-label="停權原因">`));
+  const status = (u) => (u.is_admin ? '<span class="ok">管理員</span>' : u.banned ? `<span class="no">停權</span><br><span class="n">${tw(u.banned_at)}${u.ban_reason ? "・" + esc(u.ban_reason) : ""}</span>` : "正常");
+  return `<h1>帳號與管理員</h1>
+<p>用 Google 登入過喵打的帳號都會出現在這裡。被設為管理員的帳號，登入喵打後打開 <code>/admin</code> 就能直接進管理頁。要設定自己：先在<a href="/" target="_blank" rel="noopener">喵打首頁</a>用 Google 登入一次，回到這頁就會看到你的帳號。</p>
+<div class="wrap"><table><thead><tr><th>#</th><th>電子郵件</th><th>暱稱</th><th>暱稱上次修改</th><th>第一次登入</th><th>最近登入</th><th>練完</th><th>排行榜</th><th>分享</th><th>狀態</th><th></th></tr></thead><tbody>
+${users.map((u) => `<tr${u.banned ? ' class="bn"' : ""}><td>${u.id}</td><td>${esc(u.email || "（沒有提供）")}${me.kind === "google" && me.user.id === u.id ? "（你）" : ""}</td><td>${esc(u.nick || "（還沒設定）")}</td><td>${u.nick_set_at ? tw(u.nick_set_at) : "—"}</td><td>${tw(u.created)}</td><td>${tw(u.last_login)}</td><td>${u.runs}</td><td>${u.scores}</td><td>${u.shares}</td><td>${status(u)}</td><td>${btn(u)}</td></tr>`).join("")
+  || '<tr><td colspan="11">還沒有人用 Google 登入過。</td></tr>'}</tbody></table></div>
+<p class="n">共 ${users.length} 個帳號、${admins} 位管理員、${users.filter((u) => u.banned).length} 個停權。電子郵件只有管理頁看得到，排行榜和分享只顯示暱稱。</p>
+<p class="n">停權：這個帳號的排行榜成績和分享連結都不再顯示，也不能再上榜、分享或改暱稱（還是可以練習）；恢復後成績會重新出現。暱稱第一次設定後可以改，但每改一次，7 天內不能再改。沒登入的人沒有帳號可以停權。</p>
+<h2>密碼登入</h2>
+<div class="card"><p>目前：${pwOn ? '<span class="no">開啟</span>（用 <code>ADMIN_PASSWORD</code> / <code>STATS_PASSWORD</code> 就能進管理頁）' : '<span class="ok">已停用</span>（只能用管理員的 Google 帳號登入）'}${RESCUE ? "　⚠ 伺服器設了 ADMIN_PASSWORD_RESCUE=1，暫時允許密碼登入，處理完請拿掉。" : ""}</p>
+${pwOn ? (me.kind === "google" && admins ? `<p>密碼只要外洩，任何人都能進管理頁；停用後只認管理員的 Google 帳號（有 Google 的兩步驟驗證保護）。</p>
+<form method="post" action="/admin/security"><input type="hidden" name="action" value="disable_password"><button type="submit">停用密碼登入</button></form>`
+    : `<p class="n">要停用密碼登入：先把你的 Google 帳號設為管理員，登出管理頁，再用 Google 帳號登入，回到這頁就能停用（避免把自己鎖在外面）。</p>`)
+  : `<form method="post" action="/admin/security"><input type="hidden" name="action" value="enable_password"><button type="submit" class="sec">重新啟用密碼登入</button></form>
+<p class="n">萬一 Google 登入壞掉進不來：在伺服器的 .env 加 <code>ADMIN_PASSWORD_RESCUE=1</code> 重新部署，就能暫時用密碼登入；處理完記得拿掉。</p>`}</div>`;
 }
 
 function googlePage(req) {

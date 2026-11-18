@@ -40,6 +40,11 @@ export function initStats(file) {
     CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created INTEGER NOT NULL, expires INTEGER NOT NULL);
   `);
   for (const t of ["runs", "scores", "shares", "learn"]) addCol(t, "user_id", "INTEGER");
+  addCol("users", "is_admin", "INTEGER NOT NULL DEFAULT 0"); // v0.7：用 Google 帳號登入管理頁
+  addCol("users", "nick_set_at", "INTEGER"); // v0.7：暱稱設定後 7 天內不能再改
+  addCol("users", "banned", "INTEGER NOT NULL DEFAULT 0"); // v0.7：停權（不雅暱稱等），排行榜與分享都不顯示
+  addCol("users", "banned_at", "INTEGER");
+  addCol("users", "ban_reason", "TEXT");
   // v0.6：管理頁的設定（例如 Google 登入的用戶端），存在資料庫，改了馬上生效，不用重新部署
   db.exec("CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT, updated INTEGER NOT NULL)");
   db.exec("CREATE INDEX IF NOT EXISTS runs_user ON runs(user_id, ts)");
@@ -89,7 +94,7 @@ export function createShare(x) {
 }
 /** 給別人看的分享內容（不含 cid）；count＝算一次瀏覽 */
 export function getShare(id, count) {
-  const r = db.prepare("SELECT * FROM shares WHERE id=?").get(id);
+  const r = db.prepare("SELECT * FROM shares WHERE id=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))").get(id);
   if (!r) return null;
   if (count) db.prepare("UPDATE shares SET views=views+1 WHERE id=?").run(id);
   return { id: r.id, ts: r.ts, name: r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
@@ -109,9 +114,11 @@ export function periodStart(p, now = Date.now()) {
 }
 /** 排行榜：每人只留最好的一次。登入的人以帳號算（換電腦也是同一個人），沒登入的以瀏覽器編號算 */
 export function board(c, l, m, p, me, limit = 20, meUser = null) {
-  const rows = db.prepare(`SELECT name, speed, acc, rule, cid, ts, id, specs, user_id FROM (
+  // 登入的人顯示目前的帳號暱稱（改暱稱後排行榜跟著變）
+  const rows = db.prepare(`SELECT COALESCE((SELECT nick FROM users u WHERE u.id = user_id), name) AS name, speed, acc, rule, cid, ts, id, specs, user_id FROM (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY COALESCE('u' || user_id, cid) ORDER BY speed DESC, ts ASC) rn FROM scores
-      WHERE cat=? AND len=? AND mode=? AND flag='' AND ts>=?) WHERE rn=1 ORDER BY speed DESC, ts ASC LIMIT ?`)
+      WHERE cat=? AND len=? AND mode=? AND flag='' AND ts>=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1)))
+      WHERE rn=1 ORDER BY speed DESC, ts ASC LIMIT ?`)
     .all(c, l, m, periodStart(p), limit);
   const parse = (x) => { try { return x ? JSON.parse(x) : null; } catch { return null; } };
   return rows.map((r) => ({ name: r.name, speed: Math.round(r.speed * 10) / 10, acc: Math.round(r.acc * 1000) / 1000, rule: r.rule, login: r.user_id != null,
@@ -119,7 +126,7 @@ export function board(c, l, m, p, me, limit = 20, meUser = null) {
 }
 /** 所有設定的排行榜：每種「題庫×長度×模式」的前幾名（依題庫、長度、模式排序） */
 export function boards(p, me, limit = 5, meUser = null) {
-  const combos = db.prepare("SELECT DISTINCT cat, len, mode FROM scores WHERE flag='' AND ts>=?").all(periodStart(p));
+  const combos = db.prepare("SELECT DISTINCT cat, len, mode FROM scores WHERE flag='' AND ts>=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))").all(periodStart(p));
   const ord = (r) => CATS.indexOf(r.cat) * 100 + LENS.indexOf(r.len) * 10 + (r.mode === "t60" ? 1 : 0);
   return combos.sort((a, b) => ord(a) - ord(b)).map((r) => ({ c: r.cat, l: r.len, m: r.mode, rows: board(r.cat, r.len, r.mode, p, me, limit, meUser).map(({ id, ...x }) => x) }));
 }

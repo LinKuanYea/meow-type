@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
-import { loginEnabled, currentUser, handleAuth, logout, setNick } from "./auth.js";
+import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,10 +61,13 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
-    if (url.pathname === "/api/me") { const u = currentUser(req); return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "" } : null }); }
+    if (url.pathname === "/api/me") {
+      const u = currentUser(req);
+      return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "", nickNext: nickNextChange(u), banned: !!u.banned } : null });
+    }
     if (url.pathname === "/api/me/history") {
       const u = currentUser(req);
-      return u ? json(res, 200, { user: { nick: u.nick || "", email: u.email || "" }, ...history(u.id) }) : json(res, 401, { error: "要先登入" });
+      return u ? json(res, 200, { user: { nick: u.nick || "", email: u.email || "", nickNext: nickNextChange(u), banned: !!u.banned }, ...history(u.id) }) : json(res, 401, { error: "要先登入" });
     }
     const sm = /^\/api\/share\/([0-9A-Za-z]{8})$/.exec(url.pathname);
     if (sm) { const sh = getShare(sm[1], true); return sh ? json(res, 200, sh) : json(res, 404, { error: "找不到這個挑戰，可能連結打錯了" }); }
@@ -141,7 +144,8 @@ async function handleApi(req, res, pathname) {
       const nick = cleanName(body.nick);
       if (!nick) return json(res, 400, { error: "先填一個暱稱" });
       if (badName(nick)) return json(res, 400, { error: "暱稱有不適合的字，換一個吧" });
-      setNick(user.id, nick); return json(res, 200, { ok: true, nick });
+      const r = changeNick(user.id, nick);
+      return r.error ? json(res, 400, { error: r.error }) : json(res, 200, { ok: true, nick, nickNext: nickNextChange(currentUser(req)) });
     }
     if (pathname === "/api/start") { const s = cleanId(body.sid); if (s && active.size < 5000) active.set(s, Date.now()); return json(res, 204); }
     if (pathname === "/api/end") { active.delete(cleanId(body.sid)); return json(res, 204); }
@@ -195,11 +199,23 @@ function verifyRun(b, { minAcc, minCorrect, what }) {
 function handleScore(res, b, user) {
   const v = verifyRun(b, { minAcc: 0.9, minCorrect: 20, what: "上排行榜" });
   if (v.error) return json(res, 400, { error: v.error });
-  if (user) setNick(user.id, v.name);
+  const nu = accountName(user, v); if (nu) return json(res, 403, { error: nu });
   const s = v.sum, flags = v.flags;
   const out = recordScore({ cid: v.cid, userId: user?.id ?? null, name: v.name, specs: v.specs, c: b.c, l: b.l, m: b.m, rule: b.rule, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms), flag: flags.join(",") });
   if (flags.length) console.warn(`[排行榜] 可疑成績（${flags.join(",")}）：${b.c}/${b.l}/${b.m} ${s.speed.toFixed(1)}`);
   json(res, 200, { ok: true, flagged: flags.length > 0, rank: out.rank, speed: s.speed, acc: s.acc });
+}
+
+/**
+ * 登入的人：排行榜和分享一律用帳號暱稱（改暱稱要到「我的紀錄」，7 天一次）；還沒設定暱稱的，第一次送出就把它設成帳號暱稱。
+ * 停權的帳號不能上排行榜或分享。回傳錯誤訊息，沒問題回傳空字串（並把 v.name 換成帳號暱稱）。
+ */
+function accountName(user, v) {
+  if (!user) return "";
+  if (user.banned) return "這個帳號已被停權，不能上排行榜或分享。有問題請找老師。";
+  if (user.nick) { v.name = user.nick; return ""; }
+  const r = changeNick(user.id, v.name);
+  return r.error || "";
 }
 
 /* ---------- 分享挑戰 ---------- */
@@ -208,7 +224,7 @@ function handleShareCreate(res, b, user) {
   if (v.error) return json(res, 400, { error: v.error });
   if (v.flags.length) { console.warn(`[分享] 可疑成績不給分享（${v.flags.join(",")}）`); return json(res, 400, { error: "這次的打字節奏不太像人打的，不能分享" }); }
   const s = v.sum;
-  if (user) setNick(user.id, v.name);
+  const nu = accountName(user, v); if (nu) return json(res, 403, { error: nu });
   const id = createShare({ cid: v.cid, userId: user?.id ?? null, name: v.name, c: b.c, l: b.l, m: b.m, rule: b.rule, specs: v.specs, speed: s.speed, acc: s.acc, correct: s.correct, ms: Math.round(s.ms) });
   json(res, 200, { ok: true, id, speed: s.speed, acc: s.acc });
 }

@@ -1,7 +1,7 @@
 // 喵打：前端
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
-import { ME, loadMe, onLogin, loginHint } from "/account.js";
+import { ME, loadMe, onLogin, loginHint, nickField, bannedNote } from "/account.js";
 import { catSVG } from "/cat.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
@@ -193,6 +193,7 @@ function finish(ms) {
   sendRun(true);
   const T = tips(A, { cat: S.cat, rule: S.rule, pastes: R.pastes, ime: R.ime }), c = A.cls;
   const L = R.drill ? null : learnCard(R.specs[0], S.cat, S.len);
+  const NF1 = nickField("nick", store.get("mt-nick", "")), NF2 = nickField("snick", store.get("mt-nick", ""));
   const chip = (l, n) => `<span class="${n ? "hot" : ""}">${l} ${n}</span>`;
   const mx = Math.max(1, ...A.seg);
   const canBoard = !R.drill && A.acc >= 0.9 && A.correct >= 20 && online;
@@ -205,9 +206,9 @@ function finish(ms) {
     <div class="s"><small>時間</small><strong>${(ms / 1000).toFixed(1)} 秒</strong></div>
     <div class="s"><small>打對的字</small><strong>${A.correct}</strong></div>
     ${S.cat !== "zh" ? `<div class="s"><small>字元／分</small><strong>${Math.round(cpm)}</strong></div>` : ""}</div>
-   ${canBoard ? `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label><input id="nick" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(ME.user?.nick || store.get("mt-nick", ""))}" autocomplete="off"><button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p>${loginHint()}</form>`
+   ${canBoard ? (NF1.banned ? bannedNote() : `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label>${NF1.html}<button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p>${NF1.note}${loginHint()}</form>`)
       : !R.drill && online ? `<div class="submit"><p>正確率 90% 以上、打對 20 個字以上才能上排行榜。</p></div>` : ""}
-   ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? { can: true, nick: ME.user?.nick || store.get("mt-nick", ""), hint: loginHint() } : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
+   ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? (NF2.banned ? { can: false, reason: "你的帳號已被停權，不能分享。有問題請找老師。" } : { can: true, field: NF2, hint: loginHint() }) : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
    ${L ? L.html : ""}
    <div class="cols"><div><h3>建議</h3><ul class="tips">${T.map(([b, t]) => `<li><b>${b}</b>${t}</li>`).join("") || "<li><b>很穩</b>這次沒有明顯的問題。</li>"}</ul></div>
    <div><h3>錯誤分類</h3><div class="chips">${chip("全形半形", c.width.length)}${isCode() ? chip("縮排", c.indent.length) + chip("大小寫", c.kase.length) : ""}${S.cat === "cpp" ? chip("分號", c.semi.length) : ""}${isCode() ? chip("Enter", c.enter.length) : ""}${chip("其他", c.other.length)}</div>
@@ -220,7 +221,7 @@ function finish(ms) {
   if (R.rival?.share && !R.rival.reported) { R.rival.reported = true; post(`/api/share/${R.rival.share}/${won ? "win" : "lose"}`, {}); }
   bindShare($("#res"), {
     toast,
-    create: (name) => { store.set("mt-nick", name); return post("/api/share", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice(), ms: Math.round(ms), speed: sp }); },
+    create: (name) => { store.set("mt-nick", name); if (ME.user && !ME.user.nick) { ME.user.nick = name; syncNickFields(); } return post("/api/share", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice(), ms: Math.round(ms), speed: sp }); },
     imageData: { c: S.cat, l: S.len, m: S.mode, rule: S.rule, speed: sp, acc: A.acc, ms, correct: A.correct, ts: Date.now(), beat: won && !R.rival.me ? R.rival.name : null },
   });
   if (L) {
@@ -248,6 +249,7 @@ function finish(ms) {
     f.querySelector("button").disabled = true; msg.textContent = "送出中…";
     const r = await post("/api/score", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule, specs, events, ms: Math.round(ms), speed: sp });
     if (!r || r.error) { msg.textContent = r?.error || "送不出去，等一下再試"; f.querySelector("button").disabled = false; return; }
+    if (ME.user && !ME.user.nick) { ME.user.nick = name; syncNickFields(); }
     msg.className = "msg";
     msg.textContent = r.flagged ? "收到了，但這次的打字節奏不太像人打的，先不放上排行榜。" : r.rank ? `上榜了！今天第 ${r.rank} 名。` : "收到了，但沒有比你之前的成績好，排行榜留最好的那次。";
     loadBoard();
@@ -256,6 +258,13 @@ function finish(ms) {
 }
 // 隨機編號：排行榜用它做「每人只留最好的一次」；只有同意之後才會跟著練習數據送出
 function ensureCid() { if (!CID) { CID = rid(); store.set("mt-cid", CID); } return CID; }
+
+/** 帳號已有暱稱：結算畫面兩個暱稱欄都換成帳號暱稱並鎖住 */
+function syncNickFields() {
+  if (!ME.user?.nick) return;
+  for (const id of ["#nick", "#snick"]) { const el = $(id); if (el) { el.value = ME.user.nick; el.readOnly = true; } }
+  document.querySelectorAll(".nickrule").forEach((p) => { p.innerHTML = '這是你的帳號暱稱，要改請到<a href="/me">我的紀錄</a>。暱稱不可以有不雅字眼，發現會被管理員停權。'; });
+}
 
 /* ---------- 排行榜 ---------- */
 let per = store.get("mt-board-per", "day");
@@ -449,7 +458,7 @@ loadMe().then(loadBoard);
 onLogin(() => {
   loadBoard();
   document.querySelectorAll(".loginhint").forEach((x) => x.remove());
-  for (const id of ["#nick", "#snick"]) { const el = $(id); if (el && ME.user?.nick && !el.value) el.value = ME.user.nick; }
+  syncNickFields();
   if (ME.user) toast("登入了！之後的練習會記在「我的紀錄」");
 });
 if (consent === null && online) showConsent(); else { visit(); openChallenge(); }

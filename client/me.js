@@ -7,6 +7,7 @@ import { login, logout } from "/account.js";
 const $ = (s) => document.querySelector(s);
 const setName = (c, l, m) => `${CAT_NAME[c] || c}・${LEN_NAME[l] || l}・${m === "t60" ? "1 分鐘" : "打完一題"}`;
 const tw = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const fmtTime = (ts) => { const d = new Date(ts); return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const pct = (x) => (x == null ? "—" : Math.round(x * 100) + "%");
 let tt;
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1800); }
@@ -29,8 +30,12 @@ async function main() {
   const cats = [...new Set(d.trend.map((x) => x.c))];
   $("#main").innerHTML = `
   <section class="board">
-    <form class="submit" id="nickForm"><label for="nick"><b>暱稱</b></label><input id="nick" maxlength="10" value="${esc(d.user.nick)}" placeholder="排行榜上顯示的名字"><button class="main" type="submit">儲存</button>
-      <button type="button" class="link" id="out">登出</button><p>排行榜和分享只顯示暱稱，不顯示 email。</p></form>
+    ${d.user.banned ? '<div class="msg err" role="alert">你的帳號已被停權：排行榜成績和分享連結都不會顯示，也不能上榜、分享或改暱稱。還是可以練習。有問題請找老師。</div>' : ""}
+    <form class="submit" id="nickForm"><label for="nick"><b>暱稱</b></label><input id="nick" maxlength="10" value="${esc(d.user.nick)}" placeholder="排行榜上顯示的名字"${d.user.nickNext || d.user.banned ? " disabled" : ""}>
+      <button class="main" type="submit"${d.user.nickNext || d.user.banned ? " disabled" : ""}>儲存</button>
+      <button type="button" class="link" id="out">登出</button>
+      <p id="nickMsg">${d.user.nickNext ? `暱稱剛改過，${fmtTime(d.user.nickNext)} 以後才能再改。` : d.user.nick ? "暱稱可以改，但每改一次，7 天內不能再改。" : "第一次設定暱稱。設定後還可以改，但每改一次，7 天內不能再改。"}
+      排行榜和分享只顯示暱稱，不顯示 email。<b>暱稱不可以有不雅字眼，發現會被管理員停權。</b></p></form>
     <div class="big" style="margin-top:16px">
       <div><small>練完的局數</small><strong>${t.done || 0}</strong></div>
       <div class="s"><small>這 7 天練了</small><strong>${t.week || 0} 局</strong></div>
@@ -58,11 +63,26 @@ async function main() {
     : '<p class="empty">還沒分享過。打完一局後按「產生挑戰連結」，就能傳給朋友挑戰你。</p>'}</section>`;
 
   $("#out").onclick = async () => { await logout(); location.href = "/"; };
+  let confirmChange = false;
+  $("#nick").addEventListener("input", () => { confirmChange = false; $("#nickForm button.main").textContent = "儲存"; });
   $("#nickForm").onsubmit = async (e) => {
     e.preventDefault();
-    const r = await fetch("/api/me/nick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nick: $("#nick").value.trim() }) });
+    const nick = $("#nick").value.trim(), btn = $("#nickForm button.main");
+    if (!nick || nick === d.user.nick) return;
+    // 已經有暱稱、這次是「改」：先提醒 7 天內不能再改，再按一次才送出
+    if (d.user.nick && !confirmChange) {
+      confirmChange = true; btn.textContent = "確定修改";
+      $("#nickMsg").innerHTML = `<b>改成「${esc(nick)}」之後，7 天內不能再改。</b>確定的話再按一次「確定修改」。`;
+      return;
+    }
+    const r = await fetch("/api/me/nick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nick }) });
     const j = await r.json().catch(() => ({}));
-    toast(r.ok ? "暱稱已儲存" : j.error || "存不起來，等一下再試");
+    if (!r.ok) { toast(j.error || "存不起來，等一下再試"); $("#nickMsg").textContent = j.error || ""; confirmChange = false; btn.textContent = "儲存"; return; }
+    toast("暱稱已儲存");
+    d.user.nick = nick; d.user.nickNext = j.nickNext || 0;
+    if (j.nickNext) { $("#nick").disabled = true; btn.disabled = true; }
+    $("#nickMsg").textContent = j.nickNext ? `暱稱已改成「${nick}」，${fmtTime(j.nickNext)} 以後才能再改。` : `暱稱已設定為「${nick}」。之後可以改，但每改一次，7 天內不能再改。`;
+    btn.textContent = "儲存"; confirmChange = false;
   };
   if (!t.done) return;
   let cat = cats[0];

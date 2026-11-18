@@ -38,6 +38,21 @@ function renderTop() {
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** 暱稱輸入框：登入且已有暱稱就鎖住（到「我的紀錄」改）；附上暱稱規則 */
+export function nickField(id, fallback) {
+  const u = ME.user;
+  if (u?.banned) return { html: "", banned: true };
+  const locked = !!u?.nick;
+  const v = u?.nick || fallback || "";
+  const note = locked ? `這是你的帳號暱稱，要改請到<a href="/me">我的紀錄</a>。`
+    : u ? "這會成為你的帳號暱稱；之後可以改，但每改一次，7 天內不能再改。" : "";
+  return {
+    html: `<input id="${id}" maxlength="10" placeholder="暱稱（不要填真名）" value="${esc(v)}" autocomplete="off"${locked ? " readonly" : ""}>`,
+    note: `<p class="nickrule">${note}暱稱不可以有不雅字眼，發現會被管理員停權。</p>`,
+  };
+}
+export const bannedNote = () => `<div class="submit"><p class="nickrule">你的帳號已被停權，不能上排行榜或分享。有問題請找老師。</p></div>`;
+
 /** 排行榜、分享表單裡的登入提示（沒登入才顯示） */
 export function loginHint() {
   if (!ME.enabled || ME.user) return "";

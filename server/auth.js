@@ -36,7 +36,7 @@ const cookie = (name, value, maxAge, path = "/") =>
 export function currentUser(req) {
   const tok = cookies(req).mt_sess;
   if (!tok || tok.length > 100) return null;
-  return dbh().prepare(`SELECT u.id, u.email, u.nick FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash=? AND s.expires>?`).get(sha(tok), Date.now()) || null;
+  return dbh().prepare(`SELECT u.id, u.email, u.nick, u.is_admin, u.nick_set_at, u.banned FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash=? AND s.expires>?`).get(sha(tok), Date.now()) || null;
 }
 
 function login(res, { sub, email }) {
@@ -107,10 +107,36 @@ export async function handleAuth(req, res, url) {
   return false;
 }
 
-export function logout(req, res) {
+/** 結束這個瀏覽器的登入，回傳要清掉 cookie 的 Set-Cookie */
+export function endSession(req) {
   const tok = cookies(req).mt_sess;
   if (tok) dbh().prepare("DELETE FROM sessions WHERE hash=?").run(sha(tok));
-  res.writeHead(204, { "Set-Cookie": cookie("mt_sess", "", 0), "Cache-Control": "no-store" }); res.end();
+  return cookie("mt_sess", "", 0);
+}
+export function logout(req, res) {
+  res.writeHead(204, { "Set-Cookie": endSession(req), "Cache-Control": "no-store" }); res.end();
 }
 
-export function setNick(userId, nick) { dbh().prepare("UPDATE users SET nick=? WHERE id=?").run(nick, userId); }
+/* ---------- 暱稱：第一次可以直接設定；之後每改一次，7 天內不能再改 ---------- */
+export const NICK_COOLDOWN_MS = 7 * 86400000;
+/** 下一次可以改暱稱的時間（0＝現在就可以） */
+export function nickNextChange(u) {
+  if (!u?.nick || !u.nick_set_at) return 0;
+  const t = u.nick_set_at + NICK_COOLDOWN_MS;
+  return t > Date.now() ? t : 0;
+}
+/** 改暱稱：回傳 { ok, nick } 或 { error } */
+export function changeNick(userId, nick) {
+  const db = dbh(), u = db.prepare("SELECT nick, nick_set_at, banned FROM users WHERE id=?").get(userId);
+  if (!u) return { error: "找不到帳號" };
+  if (u.banned) return { error: "這個帳號已被停權，不能改暱稱" };
+  if (u.nick === nick) return { ok: true, nick };
+  const next = nickNextChange(u);
+  if (next) {
+    const d = new Date(next + 8 * 3600000);
+    return { error: `暱稱改過之後 7 天內不能再改，${d.getUTCMonth() + 1} 月 ${d.getUTCDate()} 日 ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} 以後才能再改` };
+  }
+  // 第一次設定不算「改」；之後每改一次，7 天內不能再改
+  db.prepare("UPDATE users SET nick=?, nick_set_at=? WHERE id=?").run(nick, u.nick ? Date.now() : null, userId);
+  return { ok: true, nick };
+}
