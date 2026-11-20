@@ -301,6 +301,7 @@ try {
   // 停權
   ok((await post("/admin/users", `id=${uid}&action=ban&reason=${encodeURIComponent("暱稱不雅")}`, AC2)).headers.get("location").includes("m=banned"), "停權");
   ok((await (await get("/admin/users", AC2)).text()).includes("暱稱不雅"), "管理頁看得到停權原因");
+  ok((await (await get("/admin/users", AC2)).text()).includes("<!--email_off-->"), "管理頁請 Cloudflare 不要把 email 換成 [email protected]");
   ok(!(await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "新名字"), "停權後排行榜不顯示");
   const bn = await fetch(base + "/api/score", { method: "POST", headers: { ...GC, "Content-Type": "application/json" }, body: JSON.stringify({ ...body, cid: "d".repeat(24) }) });
   ok(bn.status === 403 && (await bn.json()).error.includes("停權"), "停權後不能上排行榜");

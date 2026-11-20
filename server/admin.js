@@ -83,7 +83,8 @@ function shell(res, cur, inner, msg, me) {
   const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
-<main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main>`);
+<!--email_off--><main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main><!--/email_off-->`);
+  // email_off：Cloudflare 的「電子郵件位址混淆」會把 email 換成 [email protected]，靠一段 JS 還原；管理頁的 CSP 不讓那段 JS 跑，所以請它跳過這裡
 }
 const redirect = (res, to, headers = {}) => { res.writeHead(303, { Location: to, "Cache-Control": "no-store", ...headers }); res.end(); };
 const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 登入設定，登入按鈕會隱藏。", bad: "格式不對，沒有儲存。", origin: "請從管理頁送出（來源不對）。",
