@@ -52,7 +52,8 @@ function build() {
     const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (!d || hold) return;
     e.preventDefault();
-    if (cats.step(...d) && reduce()) draw();
+    const r = cats.step(...d);
+    if (r) blocked(r); else if (reduce()) draw();
   });
   $("#denList").addEventListener("click", onButton);
   $("#denSide").addEventListener("click", onButton);
@@ -224,8 +225,8 @@ function clickRoom(p) {
   const hit = hitTest(p);
   if (!hit) { // 空的地板：主貓走過去
     const tx = Math.floor(p.ax / PX), ty = Math.floor(p.ay / PX);
-    if (ty >= ROOM.wall && cats.commandTile(tx, ty) && reduce()) draw();
-  } else if (cats.commandUse(hit.id) && reduce()) draw();
+    if (ty >= ROOM.wall) { const r = cats.commandTile(tx, ty); if (r) blocked(r); else if (reduce()) draw(); }
+  } else { const r = cats.commandUse(hit.id); if (r) blocked(r); else if (r === "" && reduce()) draw(); }
   if (!D.login) return;
   focus = hit ? hit.id : null; openChap = null;
   renderSide();
@@ -309,7 +310,14 @@ function background() {
 }
 
 /* ---------- 貓（client/den-cats.js） ---------- */
-const cats = new Cats(() => D.layout, (e, row) => drawItem($("#denCv").getContext("2d"), e, 1, row));
+const cats = new Cats(() => D.layout, (e, row) => drawItem($("#denCv").getContext("2d"), e, 1, row), (m) => blocked(m));
+/** 貓走不過去：跳出提示，房間下面也寫一下 */
+let tipT = 0;
+function blocked(m) {
+  C.toast(m);
+  $("#denTip").textContent = "🐾 " + m; clearTimeout(tipT);
+  tipT = setTimeout(renderHint, 3000);
+}
 const zOf = (id) => { const e = placed(id), it = e && DEN_ITEM.get(e.id); return e ? (e.y + it.h) * PX - 0.5 : 0; };
 
 /* ---------- 畫房間 ---------- */
