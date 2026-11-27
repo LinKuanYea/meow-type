@@ -11,6 +11,8 @@ import { analyze, tips, classify, drillText } from "../shared/analyze.js";
 import { ISLANDS, LEVELS, starsOf, fishFor, FISH, withSegs, segmentsOf, mergeSums, etaMin, SEG_MAX } from "../shared/quest.js";
 import { ITEMS, ITEM, cleanOutfit } from "../shared/items.js";
 import { customLevel, cleanCustom } from "../shared/custom.js";
+import { DEN_ITEM as DEN_ITEM0 } from "../shared/den.js";
+import { BOSSES, BOSS, BOSS_ART, weekOf, bossOfWeek, bossOfIndex, piecesOf, pieceOf, randomPiece, damageOf, accBonus, baseHp, hpWith, DAILY_CAP, BOSS_FISH, HP_RULE, avgChars } from "../shared/boss.js";
 import { newsLevel, newsFishFor, streakOf, twDate, addDays, NEWS_FISH } from "../shared/news.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -136,7 +138,7 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
     if (lv.drop) ok(ITEM.get(lv.drop)?.from === lv.id, `${lv.id}：掉落的裝扮對得上`);
   }
   for (const it of ITEMS) {
-    ok(it.from ? LEVELS.get(it.from)?.drop === it.id : it.price >= 0, `${it.id}：取得方式`);
+    ok(it.from ? (it.from.startsWith("boss:") ? BOSS.get(it.from.slice(5))?.item === it.id && !("price" in it) : LEVELS.get(it.from)?.drop === it.id) : it.price >= 0, `${it.id}：取得方式`);
     if (it.art) ok(it.art.every((r) => r.length === 16 && [...r].every((c) => c === "." || it.pal[c])) && it.y + it.art.length <= 14, `${it.id}：像素圖格式`);
     if (it.fur) ok(["k", "o", "w", "e", "p"].every((c) => it.fur[c]), `${it.id}：毛色`);
   }
@@ -161,6 +163,39 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   eq([newsFishFor(true, 0, 3, 0, 1, 2, 10), newsFishFor(true, 0, 1, 0, 3, 2, 10), newsFishFor(false, 0, 3, 0, 5, 2, 10), newsFishFor(false, 3, 3, 0, 0, 2, 10)], [30, 15, 12, 2], "每日新聞的小魚乾");
   for (const is of ISLANDS.filter((x) => x.open)) ok(is.chapters.length && is.chapters[0].login === false && is.chapters.slice(1).every((c) => c.login), `${is.name}：只有第 1 章不用登入`);
   ok(ISLANDS.find((x) => x.id === "py").chapters.length === 5, "Python 島：5 章（照 MeowJudge 單元）");
+}
+/* ---------- 世界 Boss：輪替、週次（台灣時間）、出擊的文字、傷害、血量 ---------- */
+{
+  ok(BOSSES.length >= 4 && new Set(BOSSES.map((b) => b.id)).size === BOSSES.length, "世界 Boss：至少 4 隻、id 不重複");
+  ok(BOSSES.every((b, i) => b.theme !== BOSSES[(i + 1) % BOSSES.length].theme) && ["cpp", "py", "en"].every((t) => BOSSES.some((b) => b.theme === t)), "世界 Boss：主題輪流 C++、Python、英文");
+  for (const b of BOSSES) {
+    ok(b.name && b.glyph && b.intro && /^#[0-9a-f]{6}$/i.test(b.color), `${b.id}：名字、符號、介紹、顏色`);
+    const it = ITEM.get(b.item) || DEN_ITEM0.get(b.item);
+    ok(it && it.from === "boss:" + b.id && !("price" in it), `${b.id}：限定獎勵 ${b.item} 存在、from 對得上、不能買`);
+  }
+  ok(BOSS_ART.length === 14 && BOSS_ART.every((r) => r.length === 16 && /^[.bdpwem]+$/.test(r)), "世界 Boss：像素圖 16 × 14");
+  const tw = (s) => Date.parse(s + "+08:00");
+  const w0 = weekOf(tw("2026-11-23T00:00:00")), w0e = weekOf(tw("2026-11-29T23:59:59")), w1 = weekOf(tw("2026-11-30T00:00:00")), wm = weekOf(tw("2026-11-22T23:59:59"));
+  eq([w0.key, w0.index, w0e.key, w0e.index, w1.key, w1.index, wm.key, wm.index], ["2026-11-23", 0, "2026-11-23", 0, "2026-11-30", 1, "2026-11-16", -1], "世界 Boss：週一 00:00 到週日 23:59（台灣時間）");
+  ok(w0.start === tw("2026-11-23T00:00:00") && w0.end === tw("2026-11-30T00:00:00") && w0.end - w0.start === 7 * 86400000, "世界 Boss：一週的開始與結束");
+  eq(weekOf(Date.parse("2026-11-29T16:00:00Z")).key, "2026-11-30", "世界 Boss：UTC 週日 16:00＝台灣週一 00:00");
+  ok(bossOfWeek(tw("2026-11-25T12:00:00")) === BOSSES[0] && bossOfWeek(tw("2026-12-01T12:00:00")) === BOSSES[1] && bossOfIndex(-1) === BOSSES.at(-1) && bossOfIndex(BOSSES.length) === BOSSES[0], "世界 Boss：每週照順序換（往前的週次也對得上）");
+  for (const t of ["cpp", "py", "en"]) {
+    const ps = piecesOf(t);
+    ok(ps.length >= 8 && ps.every((p) => p.texts.length && p.chars > 0 && p.lang === t && p.from), `世界 Boss：${t} 有出擊的文字`);
+    ok(new Set(ps.map((p) => p.id)).size === ps.length && pieceOf(t, ps[3].id) === ps[3] && pieceOf(t, "nope") === null, `世界 Boss：${t} 每段的 id`);
+    ok(randomPiece(t, ps[0].id, () => 0) !== ps[0], `世界 Boss：${t} 不會連續抽到同一段`);
+  }
+  const allSegs = new Set([...LEVELS.values()].flatMap((lv) => lv.segs.map((sg) => sg.join("\u0000"))));
+  ok(["cpp", "py"].every((t) => piecesOf(t).every((p) => allSegs.has(p.texts.join("\u0000")))), "世界 Boss：程式題都來自冒險模式的關卡");
+  const enAll = new Set([...BANK.en.sent, ...BANK.en.para].map(itemText));
+  ok(piecesOf("en").every((p) => p.texts.length === 1 && enAll.has(p.texts[0])), "世界 Boss：英文都來自題庫");
+  eq([1, 0.98, 0.96, 0.9, 0.85, 0.7].map((acc) => damageOf({ correct: 100, acc })), [150, 150, 120, 100, 100, 50], "世界 Boss：傷害＝打對的字數 × 正確率加成");
+  eq([accBonus(0.99), accBonus(0.95), accBonus(0.94)], [1.5, 1.2, 1], "世界 Boss：正確率加成");
+  ok(baseHp(0, "en") === baseHp(HP_RULE.minPlayers, "en") && baseHp(30, "en") > baseHp(10, "en") && baseHp(20, "cpp") % 100 === 0, "世界 Boss：血量依上週人數（有下限、取整到百位）");
+  ok(Math.abs(baseHp(30, "py") - 30 * avgChars("py") * HP_RULE.sortiesPerPlayer) <= 50, "世界 Boss：每人份＝平均一段 × 4 次");
+  eq([hpWith(1000, 2), hpWith(1000, 0.5), hpWith(1000, 0)], [2000, 500, 1000], "世界 Boss：血量倍率");
+  ok(BOSS_FISH.hit * DAILY_CAP < FISH.replay * FISH.replayPerDay, "世界 Boss：每天出擊的小魚乾比冒險模式重打少");
 }
 // 英文、中文題庫：content/ 的資料檔和產生的 shared/bank-text.js 一致（部署的映像檔裡沒有 content/，就跳過）
 if (existsSync(path.join(ROOT, "content/en"))) {
@@ -510,7 +545,8 @@ try {
       ok(Number.isInteger(it.w) && Number.isInteger(it.h) && it.w > 0 && it.h > 0 && ["floor", "wall"].includes(it.zone), `${it.id}：大小與位置`);
       ok(it.art.length % PX === 0 && it.art.every((r) => r.length === it.w * PX && [...r].every((c) => c === "." || it.pal[c])), `${it.id}：像素圖格式`);
       ok(artH(it) >= it.h && (it.zone === "floor" ? ROOM.wall + it.h - artH(it) >= 0 : artH(it) === it.h && it.h <= ROOM.wall), `${it.id}：圖的高度放得進房間`);
-      ok(it.learn ? !("price" in it) : Number.isInteger(it.price) && it.price >= 20 && it.price <= 80, `${it.id}：學習家具不能買、其他 20～80 條小魚乾`);
+      ok(it.learn || it.from ? !("price" in it) : Number.isInteger(it.price) && it.price >= 20 && it.price <= 80, `${it.id}：學習家具、世界 Boss 限定不能買，其他 20～80 條小魚乾`);
+      if (it.from) ok(it.from.startsWith("boss:") && BOSS.get(it.from.slice(5))?.item === it.id, `${it.id}：世界 Boss 限定家具對得上`);
       if (it.slots) ok(it.slots.every(([x, y]) => x >= 0 && y >= 0 && x + it.slotSize[0] <= it.w * PX && y + it.slotSize[1] <= it.art.length), `${it.id}：書、獎盃、剪報的位置在圖裡面`);
     }
     ok(DEN.filter((x) => !x.learn).length >= 8 && ["den-books", "den-trophy", "den-news"].every((id) => DEN_ITEM.get(id)?.learn), "貓窩：3 件學習家具、8 件以上商店家具");
@@ -587,6 +623,79 @@ try {
     eq((await xAdvpost("/api/quest/den/save", { layout: good })).status, 401, "貓窩：別人（沒登入）不能改");
     ok(!(await (await fetch(base + "/api/quest/den", { headers: XAV })).json()).owned.includes("den-box"), "貓窩：每個人的家具分開");
     ok((await get("/den.js")).status === 200 && (await get("/den-cats.js")).status === 200 && (await get("/shared/den.js")).status === 200 && (await (await get("/quest")).text()).includes('id="goDen"'), "貓窩：前端程式與按鈕");
+  }
+  // 世界 Boss
+  {
+    const bGet = async (C = {}) => (await fetch(base + "/api/boss", { headers: C })).json();
+    const bHit = (piece, events, C = {}, extra = {}) => xAdvpost("/api/boss/hit", { piece, rule: "back", events, ...extra }, C);
+    const s0 = await bGet();
+    const theme = s0.boss.theme, ps = piecesOf(theme), pc = ps.reduce((a, p) => (p.chars < a.chars ? p : a));
+    ok(!s0.login && s0.boss.name && s0.boss.art.length === 14 && !("me" in s0) && s0.top.length === 0 && s0.end - s0.start === 7 * 86400000, "世界 Boss：沒登入也看得到血條和排行 " + JSON.stringify(s0).slice(0, 200));
+    eq([s0.hp, s0.left, s0.defeated], [baseHp(0, theme), baseHp(0, theme), false], "世界 Boss：上週沒人打字，血量用下限人數算");
+    ok((await get("/shared/boss.js")).status === 200, "世界 Boss：前端程式");
+    eq((await bHit(pc.id, human(pc.texts, { seed: 1, gap: [45, 130], errRate: 0 }).evs)).status, 401, "世界 Boss：沒登入不能打");
+    const bl = async (sub) => ({ Cookie: "mt_sess=" + /mt_sess=([^;]+)/.exec((await fetch(base + `/auth/fake?sub=${sub}`, { redirect: "manual" })).headers.get("set-cookie"))[1] });
+    const B1 = await bl("boss-1"), B2 = await bl("boss-2");
+    await fetch(base + "/api/me/nick", { method: "POST", headers: { ...B1, "Content-Type": "application/json" }, body: JSON.stringify({ nick: "打王貓" }) });
+    const ev = (seed) => human(pc.texts, { seed, gap: [45, 130], errRate: 0 }).evs;
+    const h1 = await (await bHit(pc.id, ev(1), B1)).json();
+    ok(h1.ok && h1.counted && !h1.flagged && h1.bonus === 1.5 && h1.dmg === damageOf({ correct: pc.chars, acc: 1 }) && h1.fish === BOSS_FISH.hit && h1.today === 1, "世界 Boss：出擊造成傷害 " + JSON.stringify({ ...h1, state: 0 }));
+    eq(h1.state.left, s0.hp - h1.dmg, "世界 Boss：共用血條扣血");
+    ok(h1.state.me.dmg === h1.dmg && h1.state.me.rank === 1 && h1.state.top[0].name === "打王貓" && h1.state.top[0].me && h1.state.recent[0].dmg === h1.dmg, "世界 Boss：我的傷害、排行、最近的攻擊");
+    const hb = await (await bHit(pc.id, human(pc.texts, { gap: [3, 6], errRate: 0 }).evs, B1)).json();
+    ok(hb.ok && hb.flagged && hb.dmg === 0 && hb.fish === 0 && hb.today === 1 && hb.state.left === h1.state.left, "世界 Boss：驗算可疑不扣血、不算次數");
+    eq((await bHit(pc.id, ev(2).slice(0, 3), B1)).status, 400, "世界 Boss：沒打完不收");
+    eq((await bHit("q:nope:0", ev(2), B1)).status, 400, "世界 Boss：不是這週主題的文字不收");
+    eq((await bHit(pc.id, ev(2), B1, { rule: "block" })).status, 400, "世界 Boss：只收要倒退修");
+    eq((await bGet()).left, h1.state.left, "世界 Boss：驗算失敗的都沒扣血");
+    let hk; for (let k = 0; k < DAILY_CAP - 1; k++) hk = await (await bHit(pc.id, ev(10 + k), B1)).json();
+    ok(hk.counted && hk.today === DAILY_CAP, "世界 Boss：每天前 " + DAILY_CAP + " 次算傷害");
+    const ho = await (await bHit(pc.id, ev(30), B1)).json();
+    ok(ho.ok && !ho.counted && ho.over && ho.dmg === 0 && ho.raw > 0 && ho.fish === 0 && ho.state.left === hk.state.left, "世界 Boss：超過次數還能打，但不扣血、沒有小魚乾");
+    const h2 = await (await bHit(pc.id, ev(40), B2)).json();
+    ok(h2.counted && h2.dmg > 0 && h2.state.players === 2 && h2.state.top[1].name === "（還沒取暱稱）", "世界 Boss：第二個人一起打");
+    const vb = await (await xAdvpost("/api/vlink", { kind: "boss", piece: pc.id, rule: "back", events: ev(1) }, B1)).json();
+    const vbd = await (await get("/api/vlink/" + vb.id)).json();
+    ok(vb.ok && vbd.scene === "battle" && vbd.boss.name === s0.boss.name && vbd.texts.join("") === pc.texts.join(""), "世界 Boss：出擊也能做縮時影片");
+    // 管理頁
+    const bal = await fetch(base + "/admin/login", { method: "POST", headers: O, body: "password=pw", redirect: "manual" });
+    const BA = { Cookie: "mt_admin=" + /mt_admin=([^;]+)/.exec(bal.headers.get("set-cookie"))[1] };
+    const bp = await (await get("/admin/boss", BA)).text();
+    ok(bp.includes("世界 Boss") && bp.includes(s0.boss.name) && bp.includes("打王貓") && bp.includes("血量倍率"), "世界 Boss：管理頁");
+    eq((await get("/admin/boss")).status, 200, "世界 Boss：管理頁沒登入只有登入表單");
+    ok(!(await (await get("/admin/boss")).text()).includes("打王貓"), "世界 Boss：管理頁沒登入看不到排行");
+    const hpNow = (await bGet()).hp;
+    ok((await post("/admin/boss", "action=mult&value=2", BA)).headers.get("location").includes("m=bossmult"), "世界 Boss：調血量倍率");
+    eq((await bGet()).hp, hpNow * 2, "世界 Boss：倍率馬上生效");
+    ok((await post("/admin/boss", "action=mult&value=50", BA)).headers.get("location").includes("m=bad"), "世界 Boss：倍率超出範圍不收");
+    ok((await fetch(base + "/admin/boss", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...BA }, body: "action=mult&value=3", redirect: "manual" })).headers.get("location").includes("m=origin"), "世界 Boss：沒有 Origin 不能改");
+    await post("/admin/boss", "action=mult&value=1", BA);
+    eq((await bGet()).hp, hpNow, "世界 Boss：倍率改回 1");
+    // 打倒：管理員把血量設成只剩一點點，下一擊就打倒
+    const st1 = await bGet(B1), dealt = st1.hp - st1.left, fish1 = (await (await fetch(base + "/api/quest", { headers: B1 })).json()).fish;
+    ok((await post("/admin/boss", `action=hp&value=${dealt + 5}`, BA)).headers.get("location").includes("m=bosshp"), "世界 Boss：手動設定血量");
+    eq((await bGet()).left, 5, "世界 Boss：手動血量馬上生效");
+    const hkill = await (await bHit(pc.id, ev(50), B2)).json();
+    ok(hkill.killed && hkill.dmg === 5 && hkill.state.defeated && hkill.state.left === 0, "世界 Boss：最後一擊打倒（只扣到 0） " + JSON.stringify({ ...hkill, state: 0 }));
+    const item = s0.boss.item.id, isOutfit = !!ITEM.get(item);
+    const st2 = await bGet(B1), q2 = await (await fetch(base + "/api/quest", { headers: B1 })).json(), d2 = await (await fetch(base + "/api/quest/den", { headers: B1 })).json();
+    ok(st2.rewards.length === 1 && st2.rewards[0].rank === 1 && st2.rewards[0].fish === BOSS_FISH.clear + BOSS_FISH.top[0] && st2.rewards[0].item.id === item, "世界 Boss：第 1 名的獎勵 " + JSON.stringify(st2.rewards));
+    eq(q2.fish, fish1 + BOSS_FISH.clear + BOSS_FISH.top[0], "世界 Boss：小魚乾已經發了");
+    ok(isOutfit ? q2.owned.includes(item) : d2.owned.includes(item), "世界 Boss：拿到限定" + (isOutfit ? "裝扮" : "家具"));
+    const r2 = (await bGet(B2)).rewards;
+    ok(r2.length === 1 && r2[0].rank === 2 && r2[0].fish === BOSS_FISH.clear + BOSS_FISH.top[1], "世界 Boss：第 2 名的獎勵");
+    const hlate = await (await bHit(pc.id, ev(60), B2)).json();
+    ok(hlate.ok && hlate.late && hlate.dmg === 0 && !hlate.killed, "世界 Boss：打倒之後再打不扣血");
+    await post("/admin/boss", "action=hp&value=1", BA);
+    await bGet(B1); await bGet(B2);
+    eq((await (await fetch(base + "/api/quest", { headers: B1 })).json()).fish, q2.fish, "世界 Boss：獎勵只發一次（血量再改也不會重發）");
+    eq((await bGet(B1)).rewards.length, 1, "世界 Boss：獎勵通知只有一筆");
+    eq((await xAdvpost("/api/boss/seen", {})).status, 401, "世界 Boss：沒登入不能收下");
+    ok((await (await xAdvpost("/api/boss/seen", {}, B1)).json()).ok && (await bGet(B1)).rewards.length === 0 && (await bGet(B2)).rewards.length === 1, "世界 Boss：收下後通知就不見（別人的還在）");
+    ok((await (await get("/admin/boss", BA)).text()).includes("2 人"), "世界 Boss：管理頁看得到發了幾個人");
+    ok((await post("/admin/boss", "action=hp&value=", BA)).headers.get("location").includes("m=bosshpclear"), "世界 Boss：取消手動血量");
+    ok((await bGet()).defeated, "世界 Boss：打倒了就一直是打倒");
+    ok((await (await get("/privacy")).text()).includes("世界 Boss"), "世界 Boss：隱私權政策有寫");
   }
   // 每日新聞
   const nList = await (await fetch(base + "/api/news", { headers: XAV })).json();

@@ -326,3 +326,28 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .lve b{color:var(--gin)}
 #restart0{margin-left:auto}
 .denstage canvas:focus-visible{outline:3px solid var(--gin);outline-offset:3px}
+/* ---------- 世界 Boss（冒險模式的 🌍 分頁） ---------- */
+.wb{display:grid;gap:14px;margin-top:10px}
+.wb-head{display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:center;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:14px 18px}
+.wb-head canvas{width:160px;height:140px;image-rendering:pixelated}
+.wb-head h3{margin:2px 0 6px;font:400 28px "DotGothic16",monospace}
+.wb-head p{margin:4px 0}
+.wb-tag{color:var(--todo);font-size:14px}
+.wb-hp p{margin:6px 0 0;font-variant-numeric:tabular-nums}
+.wb-bar{height:26px;background:color-mix(in srgb,var(--bad) 18%,var(--card));border:3px solid var(--ink);border-radius:6px;overflow:hidden}
+.wb-bar i{display:block;height:100%;width:100%;background:linear-gradient(var(--bad),color-mix(in srgb,var(--bad) 70%,#000));transition:width .8s ease}
+.wb-me{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:14px 18px}
+.wb-me .big{margin:0 0 10px}
+.wb-me button,.wb-gift button{font:inherit;font-weight:700;min-height:44px;padding:0 18px;border-radius:12px;border:2px solid var(--gin);background:var(--gin);color:#fff;cursor:pointer}
+.wb-me #wbGo{font-size:20px;min-height:52px;padding:0 28px}
+.wb-me button:focus-visible,.wb-gift button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.wb-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.wb-grid h4{margin:0 0 6px}
+.wb-feed{list-style:none;margin:0;padding:0}
+.wb-feed li{padding:7px 2px;border-bottom:1px solid var(--line)}
+.wb-gift{display:flex;gap:14px;align-items:center;background:color-mix(in srgb,var(--gin) 14%,var(--card));border:2px solid var(--gin);border-radius:16px;padding:12px 16px}
+.wb-gift h3{margin:0 0 4px}.wb-gift p{margin:4px 0}
+.wb-gift canvas{width:120px;height:105px;flex:none;image-rendering:pixelated}
+@media (max-width:720px){.wb-grid{grid-template-columns:minmax(0,1fr)}.wb-head{grid-template-columns:96px minmax(0,1fr);padding:12px}.wb-head canvas{width:96px;height:84px}.wb-head h3{font-size:22px}.wb-gift canvas{width:72px;height:63px}}
+#wbGo{font:inherit;font-size:18px;font-weight:700;min-height:48px;padding:0 26px;border-radius:12px;border:2px solid var(--gin);background:var(--gin);color:#fff;cursor:pointer;margin-top:8px}
+#wbGo:hover{filter:brightness(1.08)}

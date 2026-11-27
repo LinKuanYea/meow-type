@@ -12,6 +12,8 @@ import { twDate } from "../shared/news.js";
 import { ISLANDS } from "../shared/quest.js";
 import { CUSTOM_LANGS, CUSTOM_TARGET, CUSTOM_MAX } from "../shared/custom.js";
 import { createSet, listSets, setSetHidden, getSet } from "./custom.js";
+import { bossAdmin, setHpMult, setManualHp } from "./boss.js";
+import { THEMES, HP_RULE, BOSS_FISH, DAILY_CAP, BOSS_RULE, avgChars } from "../shared/boss.js";
 import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
@@ -86,7 +88,7 @@ code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-br
 </style></head><body>${body}</body></html>`);
 }
 function shell(res, cur, inner, msg, me) {
-  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/quest", "冒險模式"], ["/admin/sets", "自訂題組"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/quest", "冒險模式"], ["/admin/sets", "自訂題組"], ["/admin/boss", "世界 Boss"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <!--email_off--><main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main><!--/email_off-->`);
@@ -99,6 +101,7 @@ const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 
   hidden: "已標記暱稱不雅：成績保留、名次不變，暱稱改顯示「" + HIDDEN_NAME + "」。", unhidden: "已取消標記，暱稱重新顯示。",
   approved: "已放行：這筆成績會出現在排行榜。", unapproved: "已取消放行：這筆成績不再出現在排行榜。",
   setok: "已新增題組，把下面的連結給學生。", sethid: "已收起來：學生打不開這個題組（成績還在，可以恢復）。", setshow: "已恢復，學生又可以打了。",
+  bossmult: "已更新血量倍率，馬上生效。", bosshp: "已更新這週的血量，馬上生效。", bosshpclear: "已取消手動血量，改回用人數和倍率計算。",
   newshid: "已下架：學生看不到這一天的新聞（資料還在，可以恢復）。", newsshow: "已恢復上架。",
   banadmin: "管理員不能停權，請先取消管理員。", needgoogle: "要先用管理員的 Google 帳號登入管理頁，才能停用密碼登入（避免把自己鎖在外面）。", nopw: "伺服器沒有設定管理密碼，不能啟用密碼登入。" };
 const ERRS = ["bad", "origin", "last", "needgoogle", "nopw", "banadmin"];
@@ -206,6 +209,24 @@ export async function handleAdmin(req, res, url) {
       console.warn(`[管理] 每日新聞 ${date}：${act === "hide" ? "下架" : "恢復"}`);
       redirect(res, `/admin/news?m=${act === "hide" ? "newshid" : "newsshow"}`); return true;
     }
+    if (p === "/admin/boss") {
+      const f = await readForm(req), act = f?.get("action"), v = String(f?.get("value") ?? "").trim();
+      if (act === "mult") {
+        const m = Number(v);
+        if (!(m >= 0.1 && m <= 10)) { redirect(res, "/admin/boss?m=bad"); return true; }
+        setHpMult(Math.round(m * 100) / 100); console.warn(`[管理] 世界 Boss 血量倍率：${m}`);
+        redirect(res, "/admin/boss?m=bossmult"); return true;
+      }
+      if (act === "hp") {
+        const week = bossAdmin().row.week;
+        if (v === "") { setManualHp(week, 0); redirect(res, "/admin/boss?m=bosshpclear"); return true; }
+        const n = Number(v);
+        if (!Number.isInteger(n) || n < 1 || n > 10000000) { redirect(res, "/admin/boss?m=bad"); return true; }
+        setManualHp(week, n); console.warn(`[管理] 世界 Boss ${week} 血量手動設定：${n}`);
+        redirect(res, "/admin/boss?m=bosshp"); return true;
+      }
+      redirect(res, "/admin/boss?m=bad"); return true;
+    }
     if (p === "/admin/security") {
       const f = await readForm(req), act = f?.get("action");
       if (act === "disable_password") {
@@ -246,6 +267,7 @@ export async function handleAdmin(req, res, url) {
   if (p === "/admin/news") { shell(res, "/admin/news", newsPage(), msg, me); return true; }
   if (p === "/admin/sets") { shell(res, "/admin/sets", setsPage(req), msg, me); return true; }
   if (p === "/admin/quest") { shell(res, "/admin/quest", questPage(url), msg, me); return true; }
+  if (p === "/admin/boss") { shell(res, "/admin/boss", bossPage(), msg, me); return true; }
   if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
   if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
   if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg, me); return true; }
@@ -372,6 +394,27 @@ ${list.map((n) => { const s = stat[n.key] || {}; const nw = getNews(n.key, true)
     <td>${n.hidden ? '<span class="no">已下架</span>' : n.date > today ? "還沒到" : '<span class="ok">上線</span>'}</td>
     <td><form method="post" action="/admin/news" class="inl"><input type="hidden" name="key" value="${n.key}"><input type="hidden" name="action" value="${n.hidden ? "show" : "hide"}"><button type="submit" class="small ${n.hidden ? "sec" : "warn"}">${n.hidden ? "恢復" : "下架"}</button></form></td></tr>`; }).join("")
   || '<tr><td colspan="9">還沒有新聞。</td></tr>'}</tbody></table></div>`;
+}
+
+function bossPage() {
+  const a = bossAdmin(), r = a.row, left = Math.max(0, r.hp - a.dealt);
+  const st = r.defeated_ts ? `<span class="ok">已打倒（${tw(r.defeated_ts)}）</span>` : Date.now() >= r.w.end ? '<span class="no">逃走了</span>' : "戰鬥中";
+  return `<h1>世界 Boss</h1>
+<p>每週一隻（台灣時間週一 00:00 到週日 23:59），登入的學生一起打，共用血條；主題輪流 C++、Python、英文，出擊的文字從現有題庫抽。${esc(BOSS_RULE)}超過次數還是可以打，但不扣血、沒有小魚乾。伺服器會重播按鍵紀錄驗算，可疑的不算。</p>
+<p>打倒時，這週有造成傷害的人每人 ${BOSS_FISH.clear} 條小魚乾＋這隻 Boss 的限定獎勵；傷害第 1～3 名再加 ${BOSS_FISH.top.join("、")} 條（停權的不算名次）。週日還沒打倒就逃走，沒有打倒的獎勵。</p>
+<div class="k"><div>本週 Boss<b>${esc(r.info.name)}</b><span class="n">${THEMES[r.info.theme]}・${r.week} 起</span></div><div>血量<b>${left} / ${r.hp}</b><span class="n">已打掉 ${a.dealt}</span></div>
+<div>狀態<b style="font-size:18px">${st}</b></div><div>參與人數<b>${a.ranking.length}</b></div><div>出擊次數<b>${a.hits.n || 0}</b><span class="n">算傷害 ${a.hits.c || 0}・可疑 ${a.hits.f || 0}</span></div></div>
+<div class="card"><h2 style="margin-top:0">血量</h2>
+<p>這週的基本血量 ${r.base_hp}＝max(上週有打字的登入人數 ${r.players} 人, 下限 ${HP_RULE.minPlayers} 人) × 這週主題平均一段 ${Math.round(avgChars(r.info.theme))} 字 × ${HP_RULE.sortiesPerPlayer} 次（取整到百位）。實際血量＝基本血量 × 倍率${a.manual ? `，<b>但這週手動設定成 ${a.manual}</b>` : ""}。血量調到比已經打掉的還低，就算打倒、馬上發獎勵。</p>
+<form method="post" action="/admin/boss" class="inl"><input type="hidden" name="action" value="mult"><label class="n" for="bm" style="margin:0">血量倍率（0.1～10，所有週都套用）</label> <input class="rsn" id="bm" name="value" type="text" inputmode="decimal" value="${a.mult}"> <button type="submit" class="small">儲存倍率</button></form><br>
+<form method="post" action="/admin/boss" class="inl"><input type="hidden" name="action" value="hp"><label class="n" for="bh" style="margin:0">手動設定這週的血量（空白＝不手動設定）</label> <input class="rsn" id="bh" name="value" type="text" inputmode="numeric" value="${a.manual || ""}"> <button type="submit" class="small">儲存血量</button></form></div>
+<h2>本週傷害排行</h2>
+<div class="wrap"><table><thead><tr><th>#</th><th>暱稱</th><th>傷害</th><th>出擊（有傷害）</th></tr></thead><tbody>
+${a.ranking.map((x, i) => `<tr${x.banned ? ' class="bn"' : ""}><td>${i + 1}</td><td>${esc(x.name)}${x.banned ? ' <span class="no">停權</span>' : ""}</td><td>${x.dmg}</td><td>${x.n}</td></tr>`).join("") || '<tr><td colspan="4">這週還沒有人出擊。</td></tr>'}</tbody></table></div>
+<p class="n">管理頁顯示原本的暱稱；學生看到的排行不列停權的人，暱稱被標記不雅的會遮起來。每人每天最多 ${DAILY_CAP} 次算傷害。</p>
+<h2>最近幾週</h2>
+<div class="wrap"><table><thead><tr><th>週一</th><th>Boss</th><th>上週人數</th><th>血量</th><th>打掉</th><th>參與</th><th>結果</th><th>發獎勵</th></tr></thead><tbody>
+${a.weeks.map((w) => `<tr><td>${w.week}</td><td>${esc(w.name)}</td><td>${w.players}</td><td>${w.hp}</td><td>${w.dealt}</td><td>${w.people}</td><td>${w.defeated_ts ? `<span class="ok">打倒</span> ${tw(w.defeated_ts)}` : w.week === r.week ? "戰鬥中" : '<span class="no">逃走</span>'}</td><td>${w.rewarded} 人</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function usersPage(me) {

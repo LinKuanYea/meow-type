@@ -222,7 +222,7 @@ const VLINK_DAYS = 7;
 export function initVlinks() {
   dbh().exec("CREATE TABLE IF NOT EXISTS vlinks (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, user_id INTEGER, payload TEXT NOT NULL)");
 }
-export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf }) {
+export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf, bossPiece }) {
   if (b.rule !== RULE || !Array.isArray(b.events)) return { status: 400, error: "格式不對" };
   let p;
   if (b.kind === "quest") {
@@ -234,6 +234,13 @@ export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, u
     if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
     const title = lv.news ? `📰 ${lv.news.date.slice(5).replace("-", "/")} ${lv.name}` : lv.custom ? `✎ ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
     p = { scene: "battle", lang: lv.lang, texts: lv.segs[seg], boss: lv.boss, big: !!lv.big, title: title + (lv.segs.length > 1 ? `（第 ${seg + 1}/${lv.segs.length} 段）` : ""), stars: lv.segs.length > 1 ? (user ? starMap(user.id)[lv.id] || 0 : 0) : starsOf(lv, r.sum), unit: unitOf(lv.lang) };
+  } else if (b.kind === "boss") {
+    // 世界 Boss 的一次出擊：這週的那一段文字（bossPiece 由 server/boss.js 傳進來）
+    const x = typeof b.piece === "string" && bossPiece?.(b.piece);
+    if (!x) return { status: 400, error: "這週換了新的 Boss（或題目對不上）" };
+    const r = replay({ texts: x.piece.texts, rule: b.rule, cat: x.piece.lang, events: b.events, limitMs: null });
+    if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
+    p = { scene: "battle", lang: x.piece.lang, texts: x.piece.texts, boss: x.boss, big: true, title: `🌍 世界 Boss ${x.boss.name}`, stars: 0, unit: "WPM" };
   } else if (b.kind === "practice") {
     if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m)) return { status: 400, error: "格式不對" };
     const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];

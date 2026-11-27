@@ -1,5 +1,6 @@
 // 裝扮：前端畫圖與伺服器（價格、取得方式）共用。全部原創像素圖。
 // 貓的格子是 16 × 14（cat.js）：最上面 2 列留給帽子，貓身體從第 2 列開始。
+// from：取得方式（關卡 id＝打倒那一關的 Boss 掉落；"boss:" + id＝世界 Boss 限定，shared/boss.js）
 // 圖：每一列 16 個字元，"." 是透明，其他字母查 pal 的顏色。
 export const SLOTS = [["fur", "毛色"], ["hat", "帽子"], ["face", "臉"], ["neck", "脖子"], ["back", "背後"]];
 
@@ -23,6 +24,8 @@ export const ITEMS = [
     art: ["..........wwwww.", ".........wwwwwww", "..........ggggg."] },
   { id: "hat-crown", slot: "hat", name: "if 皇冠", from: "cpp-3-4", y: 0, pal: { y: "#f5c542", r: "#d64545", d: "#b8860b" },
     art: ["..........y.y.y.", "..........yyyyy.", "..........dyryd."] },
+  { id: "hat-antenna", slot: "hat", name: "指標天線", from: "boss:segfault", y: 0, pal: { r: "#e05a5a", k: "#3b3b48" },
+    art: ["..........r...r.", "..........k...k."] },
   // 臉
   { id: "face-shades", slot: "face", name: "墨鏡", price: 50, y: 4, pal: { d: "#151515", s: "#5a5a66" },
     art: ["...........sssss", "...........ddddd"] },
@@ -32,6 +35,8 @@ export const ITEMS = [
     art: ["..............g.", ".............g.g", "..............g.", "...............g"] },
   { id: "face-patch", slot: "face", name: "排序眼罩", from: "cpp-7-5", y: 4, pal: { d: "#151515" },
     art: ["..........dddddd", ".............ddd"] },
+  { id: "face-magnifier", slot: "face", name: "拼字放大鏡", from: "boss:typo-cat", y: 4, pal: { g: "#c9a227", l: "#bfe3f5" },
+    art: ["...........ggg..", "...........glg..", "...........ggg..", "..........g....."] },
   // 脖子
   { id: "neck-red", slot: "neck", name: "紅圍巾", price: 30, y: 7, pal: { s: "#d64545", t: "#a32f2f" },
     art: ["..........ssssss", ".........tt....."] },
@@ -41,6 +46,8 @@ export const ITEMS = [
     art: ["..........gdgdge", ".........gg....."] },
   { id: "neck-bell", slot: "neck", name: "while 鈴鐺項圈", from: "cpp-4-7", y: 7, pal: { r: "#d64545", y: "#f5c542", d: "#b8860b" },
     art: ["..........rrrrrr", "............yd.."] },
+  { id: "neck-pyscarf", slot: "neck", name: "蟒紋領巾", from: "boss:py-snake", y: 7, pal: { g: "#3b8f5a", y: "#f5c542" },
+    art: ["..........gygygy", ".........gg....."] },
   // 背後
   { id: "back-cout", slot: "back", name: "cout 斗篷", from: "cpp-1-5", y: 6, pal: { c: "#c0392b", d: "#8e2a20", y: "#f5c542" },
     art: ["....ccccc.......", "...cccccccc.....", "..ccycyccd......", ".cccdccd........", "ccd............."] },
@@ -48,6 +55,8 @@ export const ITEMS = [
     art: ["....bbbb........", "...bdyydb.......", "...bbbbbb.......", "...bdbbdb......."] },
   { id: "back-wings", slot: "back", name: "for 迴圈翅膀", from: "cpp-5-5", y: 4, pal: { w: "#ffffff", g: "#c9c9d6" },
     art: [".....ww.........", "....wwgw........", "...wwwgww.......", "....wwww........"] },
+  { id: "back-except", slot: "back", name: "except 披風", from: "boss:except-king", y: 6, pal: { c: "#7b3fb5", d: "#5a2a8a", y: "#f5c542" },
+    art: ["....ccccc.......", "...cccccccc.....", "..ccyccycd......", ".cccdccd........", "ccd............."] },
 ];
 export const ITEM = new Map(ITEMS.map((x) => [x.id, x]));
 export const DEFAULT_OUTFIT = { fur: "fur-orange" };

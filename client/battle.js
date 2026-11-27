@@ -26,7 +26,7 @@ export class Battle {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ctx.imageSmoothingEnabled = false;
   }
-  /** 新的一場：boss＝{ name, glyph, color }、hp＝總血量、outfit＝貓的裝扮 */
+  /** 新的一場：boss＝{ name, glyph, color, art（選填：16 × 14 的像素圖，世界 Boss 用；沒有就用史萊姆） }、hp＝總血量、outfit＝貓的裝扮 */
   reset({ boss, hp, outfit, big }) {
     Object.assign(this, { boss, hp, left: hp, shown: hp, outfit, big: !!big, fx: [], lastKey: 0, combo: 0, won: 0, started: false, t0: 0 });
   }
@@ -76,8 +76,8 @@ export class Battle {
     const charging = this.started && !this.won && t - this.lastKey > 3000;
     c.save(); c.globalAlpha = alpha;
     if (charging) { c.fillStyle = `rgba(255,80,60,${0.25 + 0.2 * Math.sin(t / 120)})`; c.fillRect(bx - 10, by - 10, bw + 20, 14 * bs + 20); }
-    const pal = { b: this.boss.color, d: shade(this.boss.color, 0.65), w: "#fff", e: "#1a1a1a", m: "#5a1a1a" };
-    BLOB.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") { c.fillStyle = pal[ch]; c.fillRect(bx + i * bs, by + j * bs, bs + 0.5, bs + 0.5); } }));
+    const pal = { b: this.boss.color, d: shade(this.boss.color, 0.65), w: "#fff", e: "#1a1a1a", m: "#5a1a1a", p: "#f4a0b0" };
+    (this.boss.art || BLOB).forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") { c.fillStyle = pal[ch]; c.fillRect(bx + i * bs, by + j * bs, bs + 0.5, bs + 0.5); } }));
     c.fillStyle = "rgba(255,255,255,.92)"; c.font = `bold ${bs * 4}px ui-monospace, Consolas, monospace`; c.textAlign = "center"; c.textBaseline = "middle";
     c.fillText(this.boss.glyph, bx + bw / 2, by + 10.5 * bs);
     c.restore();
