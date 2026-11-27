@@ -1,6 +1,6 @@
 // 喵打測試：題庫、判定、驗算、伺服器 API。deploy.sh 會在新映像檔上跑這個，沒過就不換版本。
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,6 +99,15 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
     }
   }
   return { evs, t };
+}
+// 英文、中文題庫：content/ 的資料檔和產生的 shared/bank-text.js 一致（部署的映像檔裡沒有 content/，就跳過）
+if (existsSync(path.join(ROOT, "content/en"))) {
+  const r = spawnSync(process.execPath, [path.join(ROOT, "scripts/build-text-bank.mjs"), "--check"], { encoding: "utf8" });
+  ok(r.status === 0, "英文、中文題庫的資料檔已重新產生 " + (r.stderr || "").trim());
+}
+for (const c of ["en", "zh"]) for (const l of LENS) for (let n = 0; n < 50; n++) {
+  const sp = randomSpec(c, l, null);
+  ok(sp.i.every((k) => !BANK[c][l][k].retired), `不出已退休的題目 ${c}/${l}`);
 }
 {
   const spec = { c: "cpp", l: "para", i: [BANK.cpp.para.findIndex((x) => x.id === "cpp-bubble")] }, text = textOf(spec);

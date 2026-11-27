@@ -4,178 +4,6 @@ export const CODE_UNITS = {"cpp": ["Basic Input and Output", "Operators", "Selec
 export const CODE = {
  "cpp": [
   {
-   "id": "cpp-circle",
-   "title": "圓面積",
-   "unit": "Basic Input and Output",
-   "summary": "讀入半徑 r，用「半徑 × 半徑 × 圓周率」算出圓面積並印出來。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int r;\n    cin >> r;\n    cout << r*r*3.1415926;\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "宣告一個整數變數 r，用來存半徑。",
-    "5": "從鍵盤讀一個整數，存進 r。",
-    "6": "int 乘上小數會變成小數計算；cout 預設最多印 6 位有效數字。"
-   },
-   "quiz": {
-    "input": "3",
-    "out": "28.2743",
-    "wrong": [
-     "28",
-     "9.42478",
-     "28.2743334"
-    ]
-   }
-  },
-  {
-   "id": "cpp-escape",
-   "title": "><\"\\\\",
-   "unit": "Basic Input and Output",
-   "summary": "只用一行 cout 印出兩行符號，練習「跳脫字元」：想印出 \" 和 \\ 這種有特殊意義的字，前面要多加一個反斜線。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << \">\\\"<\\\\\\\\\\n\\\\|/\";\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "字串裡 \\\" 會印出 \"，\\\\ 會印出一個 \\，\\n 會換行。所以 \\\\\\\\ 印出兩個反斜線 \\\\。"
-   },
-   "quiz": {
-    "input": "",
-    "out": ">\"<\\\\\n\\|/",
-    "wrong": [
-     ">\"<\\\n\\|/",
-     ">\"<\\\\\\\\\n\\\\|/",
-     ">\"<\\\\ \\|/"
-    ]
-   }
-  },
-  {
-   "id": "cpp-intro",
-   "title": "美國親戚的自我介紹",
-   "unit": "Basic Input and Output",
-   "summary": "讀入名字和西元出生年，把西元換成民國（減 1911），再加上一串需要跳脫的符號印出來。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    string name;\n    int year;\n    cin >> name >> year;\n    cout << \"\\\"您好，我的名字是\" << name << \"！民國\" << year-1911 << \"年出生 ><\\\"\\\\\\\\\\\"\";\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "string 是「字串」型態，可以存一串文字，例如名字。",
-    "6": "一次讀兩個值：先讀名字，再讀年份，中間用空白隔開。",
-    "7": "year-1911 會先算出民國年再印出來；\\\" 印出雙引號，\\\\ 印出反斜線。"
-   },
-   "quiz": {
-    "input": "Amy 2010",
-    "out": "\"您好，我的名字是Amy！民國99年出生 ><\"\\\\\"",
-    "wrong": [
-     "\"您好，我的名字是Amy！民國2010年出生 ><\"\\\\\"",
-     "\"您好，我的名字是Amy！民國99年出生 ><\"\\\"",
-     "您好，我的名字是Amy！民國99年出生 ><\"\\\\"
-    ]
-   }
-  },
-  {
-   "id": "cpp-arith",
-   "title": "整數的五則運算",
-   "unit": "Operators",
-   "summary": "讀入兩個整數，印出加、減、乘、除、取餘數五種運算的算式和結果。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    cout << a << \" + \" << b << \" = \" << a + b << endl;\n    cout << a << \" - \" << b << \" = \" << a - b << endl;\n    cout << a << \" * \" << b << \" = \" << a * b << endl;\n    cout << a << \" / \" << b << \" = \" << a / b << endl;\n    cout << a << \" % \" << b << \" = \" << a % b << endl;\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "兩個整數變數。整數相除時，小數部分會被直接捨去。",
-    "6": "用 << 把文字和數字接在一起印出；endl 代表換行。",
-    "9": "兩個 int 相除是「整數除法」：17 / 5 = 3，不是 3.4。",
-    "10": "% 是取餘數：17 除以 5 商 3 餘 2。"
-   },
-   "quiz": {
-    "input": "17 5",
-    "out": "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3\n17 % 5 = 2",
-    "wrong": [
-     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3.4\n17 % 5 = 2",
-     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3\n17 % 5 = 3",
-     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3.4\n17 % 5 = 3.4"
-    ]
-   }
-  },
-  {
-   "id": "cpp-division",
-   "title": "除法原理",
-   "unit": "Operators",
-   "summary": "讀入 a、b，先印出真正的小數除法結果，再用「被除數 = 除數 × 商 + 餘數」驗證整數除法。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    double c = a;\n    cout << a << \" / \" << b << \" = \" << c/b << endl;\n    cout << a << \" = \" << b << \" * \" << a/b << \" + \" << a%b;\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "6": "把 a 複製到小數變數 c，等一下用 c/b 才會得到小數結果。",
-    "7": "c 是 double，所以 c/b 是小數除法，7 / 2 會得到 3.5。",
-    "8": "a/b 是整數除法（商），a%b 是餘數。"
-   },
-   "quiz": {
-    "input": "7 2",
-    "out": "7 / 2 = 3.5\n7 = 2 * 3 + 1",
-    "wrong": [
-     "7 / 2 = 3\n7 = 2 * 3 + 1",
-     "7 / 2 = 3.5\n7 = 2 * 3.5 + 1",
-     "7 / 2 = 3.5\n7 = 2 * 3 + 0"
-    ]
-   }
-  },
-  {
-   "id": "cpp-round",
-   "title": "四捨五入到個位數",
-   "unit": "Operators",
-   "summary": "讀入一個小數，加上 0.5 之後存進整數變數，小數部分被捨去，就得到四捨五入的結果。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    double a;\n    cin >> a;\n    int b = a + 0.5;\n    cout << b;\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "double 可以存小數。",
-    "6": "把小數存進 int 時，小數部分會直接被捨去。先加 0.5 再捨去，就等於四捨五入：2.6 + 0.5 = 3.1 → 3。"
-   },
-   "quiz": {
-    "input": "2.6",
-    "out": "3",
-    "wrong": [
-     "2",
-     "3.1",
-     "2.6"
-    ]
-   }
-  },
-  {
-   "id": "cpp-multiple",
-   "title": "倍數判斷",
-   "unit": "Selection Structure",
-   "summary": "讀入 x 和 y，用取餘數判斷 x 是不是 y 的倍數：餘數是 0 就是倍數。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    if (x % y == 0) {\n        cout << \"Yes\";\n    }\n    else {\n        cout << \"No\";\n    }\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "6": "x 除以 y 的餘數等於 0，代表整除，x 就是 y 的倍數。注意比較相等要用兩個等號 ==。",
-    "9": "上面的條件不成立時，才會跑 else 裡面的程式。"
-   },
-   "quiz": {
-    "input": "12 5",
-    "out": "No",
-    "wrong": [
-     "Yes",
-     "2",
-     "Yes\nNo"
-    ]
-   }
-  },
-  {
    "id": "cpp-shop",
    "title": "鳳新福利社大拍賣",
    "unit": "Selection Structure",
@@ -203,32 +31,6 @@ export const CODE = {
      "130",
      "117",
      "110.5"
-    ]
-   }
-  },
-  {
-   "id": "cpp-boss",
-   "title": "魔王勇者",
-   "unit": "Conditional Loop",
-   "summary": "魔王有 100 點血，勇者每次攻擊扣 atk 點；用 while 迴圈一直攻擊，直到魔王的血小於等於 0。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int hp = 100;\n    int atk;\n    cin >> atk;\n\n    while (hp > 0) {\n        hp = hp - atk;\n        cout << \"hp = \" << hp << endl;\n    }\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "魔王一開始的血量。",
-    "8": "只要魔王還有血，就一直重複大括號裡的事。每一輪開始前都會重新檢查條件。",
-    "9": "每次攻擊扣掉 atk 點血。",
-    "10": "扣完血就印出來，所以最後一行會是 0 或負數。"
-   },
-   "quiz": {
-    "input": "30",
-    "out": "hp = 70\nhp = 40\nhp = 10\nhp = -20",
-    "wrong": [
-     "hp = 70\nhp = 40\nhp = 10",
-     "hp = 100\nhp = 70\nhp = 40\nhp = 10",
-     "hp = -20"
     ]
    }
   },
@@ -340,56 +142,6 @@ export const CODE = {
      "91是質數！",
      "91會被13整除，所以不是質數。",
      "91會被7整除，所以不是質數。91是質數！"
-    ]
-   }
-  },
-  {
-   "id": "cpp-grid",
-   "title": "格子點",
-   "unit": "Counting Loop",
-   "summary": "用兩層 for 迴圈印出所有格子點座標：外層決定第幾列，內層印出這一列的每一個點。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    for (int m = 0; m <= a-1; m = m + 1) {\n        for (int n = 0; n <= b-1; n = n + 1) {\n            cout << \"(\" << m << \" \" << n << \")\";\n        }\n        cout << \"\\n\";\n    }\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "6": "外層迴圈：m 從 0 到 a-1，每一個 m 是一列。",
-    "7": "內層迴圈：外層每跑一次，內層就從頭跑完一輪。",
-    "10": "內層跑完（一列印完）才換行，所以這行在內層迴圈外面。"
-   },
-   "quiz": {
-    "input": "2 3",
-    "out": "(0 0)(0 1)(0 2)\n(1 0)(1 1)(1 2)",
-    "wrong": [
-     "(0 0)(0 1)(0 2)(1 0)(1 1)(1 2)",
-     "(0 0)(1 0)\n(0 1)(1 1)\n(0 2)(1 2)",
-     "(1 1)(1 2)(1 3)\n(2 1)(2 2)(2 3)"
-    ]
-   }
-  },
-  {
-   "id": "cpp-repeat",
-   "title": "字串重複",
-   "unit": "Counting Loop",
-   "summary": "讀入一個字串 S 和次數 N，用 for 迴圈把 S 連續印 N 次。",
-   "len": "sent",
-   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    string S;\n    int N;\n    cin >> S >> N;\n\n    for (int t = 1; t <= N; t = t + 1) {\n        cout << S;\n    }\n}",
-   "notes": {
-    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
-    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
-    "3": "程式從 main 開始執行。",
-    "4": "字串變數，存要重複的文字。",
-    "8": "t 從 1 數到 N，迴圈剛好跑 N 次。",
-    "9": "沒有空白也沒有換行，所以會黏在一起。"
-   },
-   "quiz": {
-    "input": "meow 3",
-    "out": "meowmeowmeow",
-    "wrong": [
-     "meow meow meow",
-     "meow\nmeow\nmeow",
-     "meowmeow"
     ]
    }
   },
@@ -614,52 +366,257 @@ export const CODE = {
      "25"
     ]
    }
-  }
- ],
- "py": [
+  },
   {
-   "id": "py-circle",
+   "id": "cpp-circle",
    "title": "圓面積",
    "unit": "Basic Input and Output",
-   "summary": "讀入半徑，算出圓面積，用 f-string 印到小數點後 4 位。",
+   "summary": "讀入半徑 r，用「半徑 × 半徑 × 圓周率」算出圓面積並印出來。",
    "len": "sent",
-   "t": "pi = 3.1415926\nr = input()\nr = int(r)\nprint(f'{r*r*pi:.4f}')",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int r;\n    cin >> r;\n    cout << r*r*3.1415926;\n}",
    "notes": {
-    "0": "Python 的變數不用先宣告型態，直接給值就好。",
-    "1": "input() 讀進來的一定是字串，例如 '2'。",
-    "2": "用 int() 把字串轉成整數才能計算。",
-    "3": "f-string 裡用大括號放算式；:.4f 表示印到小數點後 4 位（會四捨五入）。"
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "宣告一個整數變數 r，用來存半徑。",
+    "5": "從鍵盤讀一個整數，存進 r。",
+    "6": "int 乘上小數會變成小數計算；cout 預設最多印 6 位有效數字。"
    },
    "quiz": {
-    "input": "2",
-    "out": "12.5664",
+    "input": "3",
+    "out": "28.2743",
     "wrong": [
-     "12.566370",
-     "12.56637",
-     "12"
+     "28",
+     "9.42478",
+     "28.2743334"
     ]
    }
   },
   {
-   "id": "py-hello",
-   "title": "Hello Kitty",
+   "id": "cpp-escape",
+   "title": "><\"\\\\",
    "unit": "Basic Input and Output",
-   "summary": "第一支 Python 程式：用 print 印出一行文字。",
+   "summary": "只用一行 cout 印出兩行符號，練習「跳脫字元」：想印出 \" 和 \\ 這種有特殊意義的字，前面要多加一個反斜線。",
    "len": "sent",
-   "t": "print('Hello, Kitty!')",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << \">\\\"<\\\\\\\\\\n\\\\|/\";\n}",
    "notes": {
-    "0": "print 會把括號裡的東西印出來；單引號只是用來標示「這是字串」，不會被印出來。"
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "字串裡 \\\" 會印出 \"，\\\\ 會印出一個 \\，\\n 會換行。所以 \\\\\\\\ 印出兩個反斜線 \\\\。"
    },
    "quiz": {
     "input": "",
-    "out": "Hello, Kitty!",
+    "out": ">\"<\\\\\n\\|/",
     "wrong": [
-     "'Hello, Kitty!'",
-     "Hello Kitty",
-     "print('Hello, Kitty!')"
+     ">\"<\\\n\\|/",
+     ">\"<\\\\\\\\\n\\\\|/",
+     ">\"<\\\\ \\|/"
     ]
    }
   },
+  {
+   "id": "cpp-intro",
+   "title": "美國親戚的自我介紹",
+   "unit": "Basic Input and Output",
+   "summary": "讀入名字和西元出生年，把西元換成民國（減 1911），再加上一串需要跳脫的符號印出來。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    string name;\n    int year;\n    cin >> name >> year;\n    cout << \"\\\"您好，我的名字是\" << name << \"！民國\" << year-1911 << \"年出生 ><\\\"\\\\\\\\\\\"\";\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "string 是「字串」型態，可以存一串文字，例如名字。",
+    "6": "一次讀兩個值：先讀名字，再讀年份，中間用空白隔開。",
+    "7": "year-1911 會先算出民國年再印出來；\\\" 印出雙引號，\\\\ 印出反斜線。"
+   },
+   "quiz": {
+    "input": "Amy 2010",
+    "out": "\"您好，我的名字是Amy！民國99年出生 ><\"\\\\\"",
+    "wrong": [
+     "\"您好，我的名字是Amy！民國2010年出生 ><\"\\\\\"",
+     "\"您好，我的名字是Amy！民國99年出生 ><\"\\\"",
+     "您好，我的名字是Amy！民國99年出生 ><\"\\\\"
+    ]
+   }
+  },
+  {
+   "id": "cpp-arith",
+   "title": "整數的五則運算",
+   "unit": "Operators",
+   "summary": "讀入兩個整數，印出加、減、乘、除、取餘數五種運算的算式和結果。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    cout << a << \" + \" << b << \" = \" << a + b << endl;\n    cout << a << \" - \" << b << \" = \" << a - b << endl;\n    cout << a << \" * \" << b << \" = \" << a * b << endl;\n    cout << a << \" / \" << b << \" = \" << a / b << endl;\n    cout << a << \" % \" << b << \" = \" << a % b << endl;\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "兩個整數變數。整數相除時，小數部分會被直接捨去。",
+    "6": "用 << 把文字和數字接在一起印出；endl 代表換行。",
+    "9": "兩個 int 相除是「整數除法」：17 / 5 = 3，不是 3.4。",
+    "10": "% 是取餘數：17 除以 5 商 3 餘 2。"
+   },
+   "quiz": {
+    "input": "17 5",
+    "out": "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3\n17 % 5 = 2",
+    "wrong": [
+     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3.4\n17 % 5 = 2",
+     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3\n17 % 5 = 3",
+     "17 + 5 = 22\n17 - 5 = 12\n17 * 5 = 85\n17 / 5 = 3.4\n17 % 5 = 3.4"
+    ]
+   }
+  },
+  {
+   "id": "cpp-division",
+   "title": "除法原理",
+   "unit": "Operators",
+   "summary": "讀入 a、b，先印出真正的小數除法結果，再用「被除數 = 除數 × 商 + 餘數」驗證整數除法。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    double c = a;\n    cout << a << \" / \" << b << \" = \" << c/b << endl;\n    cout << a << \" = \" << b << \" * \" << a/b << \" + \" << a%b;\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "6": "把 a 複製到小數變數 c，等一下用 c/b 才會得到小數結果。",
+    "7": "c 是 double，所以 c/b 是小數除法，7 / 2 會得到 3.5。",
+    "8": "a/b 是整數除法（商），a%b 是餘數。"
+   },
+   "quiz": {
+    "input": "7 2",
+    "out": "7 / 2 = 3.5\n7 = 2 * 3 + 1",
+    "wrong": [
+     "7 / 2 = 3\n7 = 2 * 3 + 1",
+     "7 / 2 = 3.5\n7 = 2 * 3.5 + 1",
+     "7 / 2 = 3.5\n7 = 2 * 3 + 0"
+    ]
+   }
+  },
+  {
+   "id": "cpp-round",
+   "title": "四捨五入到個位數",
+   "unit": "Operators",
+   "summary": "讀入一個小數，加上 0.5 之後存進整數變數，小數部分被捨去，就得到四捨五入的結果。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    double a;\n    cin >> a;\n    int b = a + 0.5;\n    cout << b;\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "double 可以存小數。",
+    "6": "把小數存進 int 時，小數部分會直接被捨去。先加 0.5 再捨去，就等於四捨五入：2.6 + 0.5 = 3.1 → 3。"
+   },
+   "quiz": {
+    "input": "2.6",
+    "out": "3",
+    "wrong": [
+     "2",
+     "3.1",
+     "2.6"
+    ]
+   }
+  },
+  {
+   "id": "cpp-multiple",
+   "title": "倍數判斷",
+   "unit": "Selection Structure",
+   "summary": "讀入 x 和 y，用取餘數判斷 x 是不是 y 的倍數：餘數是 0 就是倍數。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int x, y;\n    cin >> x >> y;\n    if (x % y == 0) {\n        cout << \"Yes\";\n    }\n    else {\n        cout << \"No\";\n    }\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "6": "x 除以 y 的餘數等於 0，代表整除，x 就是 y 的倍數。注意比較相等要用兩個等號 ==。",
+    "9": "上面的條件不成立時，才會跑 else 裡面的程式。"
+   },
+   "quiz": {
+    "input": "12 5",
+    "out": "No",
+    "wrong": [
+     "Yes",
+     "2",
+     "Yes\nNo"
+    ]
+   }
+  },
+  {
+   "id": "cpp-boss",
+   "title": "魔王勇者",
+   "unit": "Conditional Loop",
+   "summary": "魔王有 100 點血，勇者每次攻擊扣 atk 點；用 while 迴圈一直攻擊，直到魔王的血小於等於 0。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int hp = 100;\n    int atk;\n    cin >> atk;\n\n    while (hp > 0) {\n        hp = hp - atk;\n        cout << \"hp = \" << hp << endl;\n    }\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "魔王一開始的血量。",
+    "8": "只要魔王還有血，就一直重複大括號裡的事。每一輪開始前都會重新檢查條件。",
+    "9": "每次攻擊扣掉 atk 點血。",
+    "10": "扣完血就印出來，所以最後一行會是 0 或負數。"
+   },
+   "quiz": {
+    "input": "30",
+    "out": "hp = 70\nhp = 40\nhp = 10\nhp = -20",
+    "wrong": [
+     "hp = 70\nhp = 40\nhp = 10",
+     "hp = 100\nhp = 70\nhp = 40\nhp = 10",
+     "hp = -20"
+    ]
+   }
+  },
+  {
+   "id": "cpp-grid",
+   "title": "格子點",
+   "unit": "Counting Loop",
+   "summary": "用兩層 for 迴圈印出所有格子點座標：外層決定第幾列，內層印出這一列的每一個點。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    int a, b;\n    cin >> a >> b;\n    for (int m = 0; m <= a-1; m = m + 1) {\n        for (int n = 0; n <= b-1; n = n + 1) {\n            cout << \"(\" << m << \" \" << n << \")\";\n        }\n        cout << \"\\n\";\n    }\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "6": "外層迴圈：m 從 0 到 a-1，每一個 m 是一列。",
+    "7": "內層迴圈：外層每跑一次，內層就從頭跑完一輪。",
+    "10": "內層跑完（一列印完）才換行，所以這行在內層迴圈外面。"
+   },
+   "quiz": {
+    "input": "2 3",
+    "out": "(0 0)(0 1)(0 2)\n(1 0)(1 1)(1 2)",
+    "wrong": [
+     "(0 0)(0 1)(0 2)(1 0)(1 1)(1 2)",
+     "(0 0)(1 0)\n(0 1)(1 1)\n(0 2)(1 2)",
+     "(1 1)(1 2)(1 3)\n(2 1)(2 2)(2 3)"
+    ]
+   }
+  },
+  {
+   "id": "cpp-repeat",
+   "title": "字串重複",
+   "unit": "Counting Loop",
+   "summary": "讀入一個字串 S 和次數 N，用 for 迴圈把 S 連續印 N 次。",
+   "len": "sent",
+   "t": "#include <iostream>\nusing namespace std;\n\nint main() {\n    string S;\n    int N;\n    cin >> S >> N;\n\n    for (int t = 1; t <= N; t = t + 1) {\n        cout << S;\n    }\n}",
+   "notes": {
+    "0": "載入輸入輸出的功能，才能用 cin 和 cout。",
+    "1": "使用標準命名空間，這樣 cout、cin 前面就不用寫 std::。",
+    "3": "程式從 main 開始執行。",
+    "4": "字串變數，存要重複的文字。",
+    "8": "t 從 1 數到 N，迴圈剛好跑 N 次。",
+    "9": "沒有空白也沒有換行，所以會黏在一起。"
+   },
+   "quiz": {
+    "input": "meow 3",
+    "out": "meowmeowmeow",
+    "wrong": [
+     "meow meow meow",
+     "meow\nmeow\nmeow",
+     "meowmeow"
+    ]
+   }
+  }
+ ],
+ "py": [
   {
    "id": "py-bmi",
    "title": "BMI Result",
@@ -735,6 +692,194 @@ export const CODE = {
    }
   },
   {
+   "id": "py-coke",
+   "title": "肥宅快樂水（瓶子）",
+   "unit": "Conditional Loop",
+   "summary": "一瓶 27 元，4 個空瓶換 1 瓶。這個版本每一輪把能換的空瓶一次換完，算出總共喝幾瓶、剩幾個空瓶。",
+   "len": "para",
+   "t": "money = int(input())\ncoke = money // 27\nbottle = coke\n\nwhile bottle >= 4:\n    ex = bottle // 4\n    bottle = bottle % 4\n    bottle += ex\n    coke += ex\n\nprint(f'{coke} {bottle}')",
+   "notes": {
+    "1": "整數除法：錢能買幾瓶。",
+    "4": "空瓶夠 4 個就繼續換。",
+    "5": "這一輪一次能換幾瓶。",
+    "6": "換完剩下湊不滿 4 個的空瓶，",
+    "7": "換來的可樂喝完又變成空瓶。+= 是「加上」的簡寫。"
+   },
+   "quiz": {
+    "input": "300",
+    "out": "14 2",
+    "wrong": [
+     "11 11",
+     "14 3",
+     "13 1"
+    ]
+   }
+  },
+  {
+   "id": "py-coke2",
+   "title": "肥宅快樂水（瓶子+蓋子）",
+   "unit": "Conditional Loop",
+   "summary": "進階版：4 個空瓶換 1 瓶、每個瓶蓋退 5 元、錢夠 27 元就再買，三件事輪流做，直到都不能做為止。",
+   "len": "para",
+   "t": "money = int(input())\ncoke = money // 27\nbottle = coke\ncap = coke\nmoney %= 27\n\nwhile (bottle >= 4) or (cap > 0) or (money >= 27):\n    if bottle >= 4:\n        bottle -= 4\n        coke += 1\n        bottle += 1\n        cap += 1\n\n    if cap > 0:\n        money += cap * 5\n        cap = 0\n\n    if money >= 27:\n        money -= 27\n        coke += 1\n        bottle += 1\n        cap += 1\nprint(f'{coke}\\n{bottle}\\n{money}')",
+   "notes": {
+    "4": "買完剩下的零錢。%= 是「取餘數後存回去」的簡寫。",
+    "6": "三件事只要有一件還能做就繼續。",
+    "7": "空瓶換一瓶，喝完多一個瓶子和瓶蓋。",
+    "13": "瓶蓋全部退錢。",
+    "17": "錢夠就買一瓶。",
+    "22": "\\n 是換行，所以會印成三行。"
+   },
+   "quiz": {
+    "input": "54",
+    "out": "2\n2\n10",
+    "wrong": [
+     "2\n2\n0",
+     "3\n3\n19",
+     "2\n0\n10"
+    ]
+   }
+  },
+  {
+   "id": "py-prime",
+   "title": "質數判斷",
+   "unit": "Counting Loop",
+   "summary": "從 2 試到 N-1，有任何一個數能整除 N，就不是質數；全部都不能整除才是質數。",
+   "len": "para",
+   "t": "N = int(input())\n\nisPrime = True\nfor i in range(2, N):\n    if N % i == 0:\n        print(f'{N}會被{i}整除，所以不是質數。')\n        isPrime = False\n        break\n\nif isPrime:\n    print(f'{N}是質數！')",
+   "notes": {
+    "2": "先假設是質數。Python 的 True、False 開頭要大寫。",
+    "3": "range(2, N) 是 2、3、…、N-1，不包含 N。",
+    "4": "能整除就找到因數了。",
+    "7": "找到一個就夠，直接跳出迴圈。",
+    "9": "迴圈結束後還是 True，代表沒有任何因數。"
+   },
+   "quiz": {
+    "input": "49",
+    "out": "49會被7整除，所以不是質數。",
+    "wrong": [
+     "49是質數！",
+     "49會被2整除，所以不是質數。",
+     "49會被7整除，所以不是質數。\n49是質數！"
+    ]
+   }
+  },
+  {
+   "id": "py-seq",
+   "title": "等差數列-for版",
+   "unit": "Counting Loop",
+   "summary": "讀入首項、第二項和項數 n，算出公差，用 for 迴圈印出數列，數字之間用逗號隔開，最後一個後面沒有逗號。",
+   "len": "para",
+   "t": "a1, a2, n = input().split()\na1 = int(a1)\na2 = int(a2)\nn = int(n)\n\na = a1\nd = a2 - a1\n\nfor i in range(n-1):\n    print(a, end=',')\n    a += d\n\nprint(a, end='')",
+   "notes": {
+    "6": "公差可以是負的，例如 7 - 10 = -3。",
+    "8": "先印前 n-1 項，每項後面都接逗號。",
+    "9": "end=',' 讓 print 結尾印逗號而不是換行。",
+    "12": "最後一項單獨印，後面不加逗號。"
+   },
+   "quiz": {
+    "input": "10 7 4",
+    "out": "10,7,4,1",
+    "wrong": [
+     "10,7,4,1,",
+     "10,13,16,19",
+     "10,7,4"
+    ]
+   }
+  },
+  {
+   "id": "py-pass",
+   "title": "及格與不及格",
+   "unit": "List and Iteration",
+   "summary": "把成績分成及格和不及格兩個 list，分兩行印出來；某一組沒有人就印 none。",
+   "len": "para",
+   "t": "n = int(input())\nscores = list(map(int, input().split()))\npassed = []\nfailed = []\n\nfor score in scores:\n    if score >= 60:\n        passed.append(score)\n    else:\n        failed.append(score)\n\nif passed:\n    print(*passed)\nelse:\n    print('none')\n\nif failed:\n    print(*failed)\nelse:\n    print('none')",
+   "notes": {
+    "2": "先準備兩個空的 list。",
+    "6": "60 分也算及格。",
+    "7": "append 把一個值加到 list 的最後面。",
+    "11": "list 裡面有東西就是 True，空的 list 是 False。",
+    "12": "* 會把 list 拆開，印成用空白隔開的數字，不會有中括號。"
+   },
+   "quiz": {
+    "input": "5\n55 80 60 42 99",
+    "out": "80 60 99\n55 42",
+    "wrong": [
+     "80 99\n55 60 42",
+     "[80, 60, 99]\n[55, 42]",
+     "80 60 99 55 42"
+    ]
+   }
+  },
+  {
+   "id": "py-stats",
+   "title": "全班成績統計",
+   "unit": "List and Iteration",
+   "summary": "讀入 n 個成績存進 list，算出總分、平均（印到小數點後 2 位），以及高於平均的人數。",
+   "len": "para",
+   "t": "n = int(input())\nscores = list(map(int, input().split()))\n\ntotal = 0\nfor score in scores:\n    total = total + score\n\naverage = total / n\n\ncount = 0\nfor score in scores:\n    if score > average:\n        count = count + 1\n\nprint(f'{total}\\n{average:.2f}\\n{count}')",
+   "notes": {
+    "1": "一行讀進所有成績，轉成整數後放進 list。",
+    "4": "走訪 list：score 依序是每一個成績。",
+    "5": "累加總分。",
+    "7": "/ 會得到小數。",
+    "11": "再走訪一次，數有幾個人高於平均（等於平均不算）。",
+    "14": ":.2f 印到小數點後 2 位。"
+   },
+   "quiz": {
+    "input": "4\n60 90 75 80",
+    "out": "305\n76.25\n2",
+    "wrong": [
+     "305\n76.25\n3",
+     "305\n76.3\n2",
+     "305\n76\n2"
+    ]
+   }
+  },
+  {
+   "id": "py-circle",
+   "title": "圓面積",
+   "unit": "Basic Input and Output",
+   "summary": "讀入半徑，算出圓面積，用 f-string 印到小數點後 4 位。",
+   "len": "sent",
+   "t": "pi = 3.1415926\nr = input()\nr = int(r)\nprint(f'{r*r*pi:.4f}')",
+   "notes": {
+    "0": "Python 的變數不用先宣告型態，直接給值就好。",
+    "1": "input() 讀進來的一定是字串，例如 '2'。",
+    "2": "用 int() 把字串轉成整數才能計算。",
+    "3": "f-string 裡用大括號放算式；:.4f 表示印到小數點後 4 位（會四捨五入）。"
+   },
+   "quiz": {
+    "input": "2",
+    "out": "12.5664",
+    "wrong": [
+     "12.566370",
+     "12.56637",
+     "12"
+    ]
+   }
+  },
+  {
+   "id": "py-hello",
+   "title": "Hello Kitty",
+   "unit": "Basic Input and Output",
+   "summary": "第一支 Python 程式：用 print 印出一行文字。",
+   "len": "sent",
+   "t": "print('Hello, Kitty!')",
+   "notes": {
+    "0": "print 會把括號裡的東西印出來；單引號只是用來標示「這是字串」，不會被印出來。"
+   },
+   "quiz": {
+    "input": "",
+    "out": "Hello, Kitty!",
+    "wrong": [
+     "'Hello, Kitty!'",
+     "Hello Kitty",
+     "print('Hello, Kitty!')"
+    ]
+   }
+  },
+  {
    "id": "py-leap",
    "title": "文文的求婚--續集 (1 行版)",
    "unit": "Selection Structure",
@@ -795,55 +940,6 @@ export const CODE = {
      "hp = 55\nhp = 10",
      "hp = 55\nhp = 10\nhp = -35\nhp = -80",
      "hp = -35"
-    ]
-   }
-  },
-  {
-   "id": "py-coke",
-   "title": "肥宅快樂水（瓶子）",
-   "unit": "Conditional Loop",
-   "summary": "一瓶 27 元，4 個空瓶換 1 瓶。這個版本每一輪把能換的空瓶一次換完，算出總共喝幾瓶、剩幾個空瓶。",
-   "len": "para",
-   "t": "money = int(input())\ncoke = money // 27\nbottle = coke\n\nwhile bottle >= 4:\n    ex = bottle // 4\n    bottle = bottle % 4\n    bottle += ex\n    coke += ex\n\nprint(f'{coke} {bottle}')",
-   "notes": {
-    "1": "整數除法：錢能買幾瓶。",
-    "4": "空瓶夠 4 個就繼續換。",
-    "5": "這一輪一次能換幾瓶。",
-    "6": "換完剩下湊不滿 4 個的空瓶，",
-    "7": "換來的可樂喝完又變成空瓶。+= 是「加上」的簡寫。"
-   },
-   "quiz": {
-    "input": "300",
-    "out": "14 2",
-    "wrong": [
-     "11 11",
-     "14 3",
-     "13 1"
-    ]
-   }
-  },
-  {
-   "id": "py-coke2",
-   "title": "肥宅快樂水（瓶子+蓋子）",
-   "unit": "Conditional Loop",
-   "summary": "進階版：4 個空瓶換 1 瓶、每個瓶蓋退 5 元、錢夠 27 元就再買，三件事輪流做，直到都不能做為止。",
-   "len": "para",
-   "t": "money = int(input())\ncoke = money // 27\nbottle = coke\ncap = coke\nmoney %= 27\n\nwhile (bottle >= 4) or (cap > 0) or (money >= 27):\n    if bottle >= 4:\n        bottle -= 4\n        coke += 1\n        bottle += 1\n        cap += 1\n\n    if cap > 0:\n        money += cap * 5\n        cap = 0\n\n    if money >= 27:\n        money -= 27\n        coke += 1\n        bottle += 1\n        cap += 1\nprint(f'{coke}\\n{bottle}\\n{money}')",
-   "notes": {
-    "4": "買完剩下的零錢。%= 是「取餘數後存回去」的簡寫。",
-    "6": "三件事只要有一件還能做就繼續。",
-    "7": "空瓶換一瓶，喝完多一個瓶子和瓶蓋。",
-    "13": "瓶蓋全部退錢。",
-    "17": "錢夠就買一瓶。",
-    "22": "\\n 是換行，所以會印成三行。"
-   },
-   "quiz": {
-    "input": "54",
-    "out": "2\n2\n10",
-    "wrong": [
-     "2\n2\n0",
-     "3\n3\n19",
-     "2\n0\n10"
     ]
    }
   },
@@ -918,30 +1014,6 @@ export const CODE = {
    }
   },
   {
-   "id": "py-prime",
-   "title": "質數判斷",
-   "unit": "Counting Loop",
-   "summary": "從 2 試到 N-1，有任何一個數能整除 N，就不是質數；全部都不能整除才是質數。",
-   "len": "para",
-   "t": "N = int(input())\n\nisPrime = True\nfor i in range(2, N):\n    if N % i == 0:\n        print(f'{N}會被{i}整除，所以不是質數。')\n        isPrime = False\n        break\n\nif isPrime:\n    print(f'{N}是質數！')",
-   "notes": {
-    "2": "先假設是質數。Python 的 True、False 開頭要大寫。",
-    "3": "range(2, N) 是 2、3、…、N-1，不包含 N。",
-    "4": "能整除就找到因數了。",
-    "7": "找到一個就夠，直接跳出迴圈。",
-    "9": "迴圈結束後還是 True，代表沒有任何因數。"
-   },
-   "quiz": {
-    "input": "49",
-    "out": "49會被7整除，所以不是質數。",
-    "wrong": [
-     "49是質數！",
-     "49會被2整除，所以不是質數。",
-     "49會被7整除，所以不是質數。\n49是質數！"
-    ]
-   }
-  },
-  {
    "id": "py-repeat",
    "title": "字串重複",
    "unit": "Counting Loop",
@@ -966,53 +1038,6 @@ export const CODE = {
    }
   },
   {
-   "id": "py-seq",
-   "title": "等差數列-for版",
-   "unit": "Counting Loop",
-   "summary": "讀入首項、第二項和項數 n，算出公差，用 for 迴圈印出數列，數字之間用逗號隔開，最後一個後面沒有逗號。",
-   "len": "para",
-   "t": "a1, a2, n = input().split()\na1 = int(a1)\na2 = int(a2)\nn = int(n)\n\na = a1\nd = a2 - a1\n\nfor i in range(n-1):\n    print(a, end=',')\n    a += d\n\nprint(a, end='')",
-   "notes": {
-    "6": "公差可以是負的，例如 7 - 10 = -3。",
-    "8": "先印前 n-1 項，每項後面都接逗號。",
-    "9": "end=',' 讓 print 結尾印逗號而不是換行。",
-    "12": "最後一項單獨印，後面不加逗號。"
-   },
-   "quiz": {
-    "input": "10 7 4",
-    "out": "10,7,4,1",
-    "wrong": [
-     "10,7,4,1,",
-     "10,13,16,19",
-     "10,7,4"
-    ]
-   }
-  },
-  {
-   "id": "py-pass",
-   "title": "及格與不及格",
-   "unit": "List and Iteration",
-   "summary": "把成績分成及格和不及格兩個 list，分兩行印出來；某一組沒有人就印 none。",
-   "len": "para",
-   "t": "n = int(input())\nscores = list(map(int, input().split()))\npassed = []\nfailed = []\n\nfor score in scores:\n    if score >= 60:\n        passed.append(score)\n    else:\n        failed.append(score)\n\nif passed:\n    print(*passed)\nelse:\n    print('none')\n\nif failed:\n    print(*failed)\nelse:\n    print('none')",
-   "notes": {
-    "2": "先準備兩個空的 list。",
-    "6": "60 分也算及格。",
-    "7": "append 把一個值加到 list 的最後面。",
-    "11": "list 裡面有東西就是 True，空的 list 是 False。",
-    "12": "* 會把 list 拆開，印成用空白隔開的數字，不會有中括號。"
-   },
-   "quiz": {
-    "input": "5\n55 80 60 42 99",
-    "out": "80 60 99\n55 42",
-    "wrong": [
-     "80 99\n55 60 42",
-     "[80, 60, 99]\n[55, 42]",
-     "80 60 99 55 42"
-    ]
-   }
-  },
-  {
    "id": "py-rail",
    "title": "柵欄密碼加密",
    "unit": "List and Iteration",
@@ -1031,31 +1056,6 @@ export const CODE = {
      "mwmwoeoe",
      "eoeomwmw",
      "mowemowe"
-    ]
-   }
-  },
-  {
-   "id": "py-stats",
-   "title": "全班成績統計",
-   "unit": "List and Iteration",
-   "summary": "讀入 n 個成績存進 list，算出總分、平均（印到小數點後 2 位），以及高於平均的人數。",
-   "len": "para",
-   "t": "n = int(input())\nscores = list(map(int, input().split()))\n\ntotal = 0\nfor score in scores:\n    total = total + score\n\naverage = total / n\n\ncount = 0\nfor score in scores:\n    if score > average:\n        count = count + 1\n\nprint(f'{total}\\n{average:.2f}\\n{count}')",
-   "notes": {
-    "1": "一行讀進所有成績，轉成整數後放進 list。",
-    "4": "走訪 list：score 依序是每一個成績。",
-    "5": "累加總分。",
-    "7": "/ 會得到小數。",
-    "11": "再走訪一次，數有幾個人高於平均（等於平均不算）。",
-    "14": ":.2f 印到小數點後 2 位。"
-   },
-   "quiz": {
-    "input": "4\n60 90 75 80",
-    "out": "305\n76.25\n2",
-    "wrong": [
-     "305\n76.25\n3",
-     "305\n76.3\n2",
-     "305\n76\n2"
     ]
    }
   }

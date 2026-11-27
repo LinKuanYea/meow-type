@@ -1,0 +1,10 @@
+[
+  {"t":"The cat jumped onto the desk and knocked my pencil off.","vocab":[{"w":"jump onto","pos":"ph.","zh":"跳上（某處）","lv":1},{"w":"knock off","pos":"ph.","zh":"把…撞掉","lv":2,"ex":"The dog knocked the cup off the table."},{"w":"pencil","pos":"n.","zh":"鉛筆","lv":1}]},
+  {"t":"Please save your file before you close the window.","vocab":[{"w":"save","pos":"v.","zh":"儲存；拯救","lv":1},{"w":"file","pos":"n.","zh":"檔案","lv":2},{"w":"before","pos":"conj.","zh":"在…之前","lv":1},{"w":"close","pos":"v.","zh":"關閉","lv":1}]},
+  {"t":"A loop repeats the same steps until a condition is false.","vocab":[{"w":"loop","pos":"n.","zh":"迴圈；圈","lv":2},{"w":"repeat","pos":"v.","zh":"重複","lv":2},{"w":"until","pos":"conj.","zh":"直到","lv":1},{"w":"condition","pos":"n.","zh":"條件；狀況","lv":2}]},
+  {"t":"My little brother wants a kitten for his birthday.","vocab":[{"w":"kitten","pos":"n.","zh":"小貓","lv":1},{"w":"birthday","pos":"n.","zh":"生日","lv":1},{"w":"want","pos":"v.","zh":"想要","lv":1}]},
+  {"t":"Practice a little every day, and your fingers will remember.","vocab":[{"w":"practice","pos":"v.","zh":"練習","lv":1},{"w":"a little","pos":"ph.","zh":"一點點","lv":1,"ex":"Add a little sugar."},{"w":"finger","pos":"n.","zh":"手指","lv":1},{"w":"remember","pos":"v.","zh":"記得","lv":1}]},
+  {"t":"The library opens at eight, but the cafe opens at seven.","vocab":[{"w":"library","pos":"n.","zh":"圖書館","lv":1},{"w":"open","pos":"v.","zh":"開門；打開","lv":1},{"w":"cafe","pos":"n.","zh":"咖啡廳","lv":2}]},
+  {"t":"Every program starts with a small idea and a lot of testing.","vocab":[{"w":"start with","pos":"ph.","zh":"從…開始","lv":1,"ex":"Let's start with an easy question."},{"w":"idea","pos":"n.","zh":"想法","lv":1},{"w":"a lot of","pos":"ph.","zh":"很多的","lv":1},{"w":"testing","pos":"n.","zh":"測試","lv":2}]},
+  {"t":"She forgot her umbrella, so she ran home in the rain.","vocab":[{"w":"forget","pos":"v.","zh":"忘記（過去式 forgot）","lv":1},{"w":"umbrella","pos":"n.","zh":"雨傘","lv":1},{"w":"in the rain","pos":"ph.","zh":"在雨中","lv":1,"ex":"We played soccer in the rain."}]}
+]
