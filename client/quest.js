@@ -11,6 +11,7 @@ import { Battle } from "/battle.js";
 import { TypeBox } from "/typebox.js";
 import { learnCard } from "/learn.js";
 import { videoPanel, canMakeVideo } from "/vidui.js";
+import { openDen } from "/den.js";
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -103,7 +104,7 @@ function newsLearn(n) {
     <h3>讀懂了嗎？</h3>${n.questions.map((q, i) => `<fieldset class="nq" data-a="${q.answer}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label><input type="radio" name="nq${i}" value="${k}"> ${esc(o)}</label>`).join("")}<p class="why" hidden>${esc(q.why)}</p></fieldset>`).join("")}
     <p class="hint">原始報導：${n.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}（這篇是用自己的話改寫的練習文章）</p></div>`;
 }
-function show(id) { for (const s of ["map", "play", "closet"]) $("#" + s).hidden = s !== id; }
+function show(id) { for (const s of ["map", "play", "closet", "den"]) $("#" + s).hidden = s !== id; }
 
 /* ---------- 戰鬥 ---------- */
 const battle = new Battle($("#arena"));
@@ -294,6 +295,10 @@ $("#slots").addEventListener("click", async (e) => {
 });
 $("#goCloset").onclick = renderCloset;
 $("#back2").onclick = renderMap;
+/* ---------- 貓窩（client/den.js） ---------- */
+const den = () => openDen({ show, api, toast, ST });
+$("#goDen").onclick = den;
+$("#back3").onclick = renderMap;
 addEventListener("resize", () => { if (R && !$("#play").hidden) TB.paint(); });
 
 /* ---------- 開始 ---------- */
@@ -304,4 +309,4 @@ addEventListener("resize", () => { if (R && !$("#play").hidden) TB.paint(); });
   askLogin("（沒登入只能玩第 1 章）");
   window.__mtReady = true;
 })();
-onLogin(async () => { await loadState(); if (!$("#map").hidden) renderMap(); else if (!$("#closet").hidden) renderCloset(); if (ME.user) toast("登入了！進度和小魚乾會存在你的帳號"); });
+onLogin(async () => { await loadState(); if (!$("#map").hidden) renderMap(); else if (!$("#closet").hidden) renderCloset(); else if (!$("#den").hidden) den(); if (ME.user) toast("登入了！進度和小魚乾會存在你的帳號"); });
