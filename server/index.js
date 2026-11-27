@@ -10,6 +10,7 @@ import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
 import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink, RULE } from "./quest.js";
+import { initDen, denState, denBuy, denSave } from "./den.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId, dropOtherRuleScores } from "./stats.js";
 
@@ -30,6 +31,7 @@ console.log(`喵打 ${VERSION_LABEL}`);
 initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
 dropOtherRuleScores();
 initAdventure();
+initDen();
 initVlinks();
 
 /* ---------- Node 版本檢查（2026-10-21 資安更新） ---------- */
@@ -65,6 +67,7 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
+    if (url.pathname === "/api/quest/den") return json(res, 200, denState(currentUser(req)));
     if (url.pathname === "/api/quest") return json(res, 200, advState(currentUser(req)));
     if (url.pathname === "/api/news") return json(res, 200, newsOverview(currentUser(req)));
     const vm = /^\/api\/vlink\/([0-9A-Za-z]{8})$/.exec(url.pathname);
@@ -170,7 +173,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body, user);
     if (pathname === "/api/vlink") { const r = createVlink(user, body, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf }); return r.error ? json(res, r.status, { error: r.error }) : json(res, 200, r); }
-    const adv = { "/api/quest/clear": advClear, "/api/quest/buy": advBuy, "/api/quest/wear": advWear }[pathname];
+    const adv = { "/api/quest/clear": advClear, "/api/quest/buy": advBuy, "/api/quest/wear": advWear, "/api/quest/den/buy": denBuy, "/api/quest/den/save": denSave }[pathname];
     if (adv) { const r = adv(user, body); return r.error ? json(res, r.status || 400, { error: r.error }) : json(res, 200, r); }
     if (pathname === "/api/share") return handleShareCreate(res, body, user);
     const ev = /^\/api\/share\/([0-9A-Za-z]{8})\/(accept|win|lose)$/.exec(pathname);

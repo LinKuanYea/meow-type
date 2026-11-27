@@ -447,6 +447,67 @@ try {
   let xPoor = 0; for (let k = 0; k < 20; k++) { const r = await xAdvpost("/api/quest/buy", { item: ["fur-black", "fur-white", "face-shades", "neck-red", "neck-blue", "fur-gray", "fur-cream", "hat-fisher"][k % 8] }, XAV); if (r.status === 400) xPoor++; }
   ok(xPoor > 0, "小魚乾不夠就買不了");
   ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).fish >= 0, "小魚乾不會變負的");
+  // 貓窩：家具目錄、購買、擺設
+  {
+    const { DEN, DEN_ITEM, ROOM, PX, artH, unlockedOf, layoutError } = await import("../shared/den.js");
+    ok(new Set(DEN.map((x) => x.id)).size === DEN.length && DEN.every((x) => x.id.startsWith("den-") && x.name && x.how), "貓窩：家具 id 不重複、以 den- 開頭、有名稱和取得方式");
+    for (const it of DEN) {
+      ok(Number.isInteger(it.w) && Number.isInteger(it.h) && it.w > 0 && it.h > 0 && ["floor", "wall"].includes(it.zone), `${it.id}：大小與位置`);
+      ok(it.art.length % PX === 0 && it.art.every((r) => r.length === it.w * PX && [...r].every((c) => c === "." || it.pal[c])), `${it.id}：像素圖格式`);
+      ok(artH(it) >= it.h && (it.zone === "floor" ? ROOM.wall + it.h - artH(it) >= 0 : artH(it) === it.h && it.h <= ROOM.wall), `${it.id}：圖的高度放得進房間`);
+      ok(it.learn ? !("price" in it) : Number.isInteger(it.price) && it.price >= 20 && it.price <= 80, `${it.id}：學習家具不能買、其他 20～80 條小魚乾`);
+      if (it.slots) ok(it.slots.every(([x, y]) => x >= 0 && y >= 0 && x + it.slotSize[0] <= it.w * PX && y + it.slotSize[1] <= it.art.length), `${it.id}：書、獎盃、剪報的位置在圖裡面`);
+    }
+    ok(DEN.filter((x) => !x.learn).length >= 8 && ["den-books", "den-trophy", "den-news"].every((id) => DEN_ITEM.get(id)?.learn), "貓窩：3 件學習家具、8 件以上商店家具");
+    eq([unlockedOf({ books: [], trophies: [], news: 2 }), unlockedOf({ books: ["cpp-1"], trophies: ["cpp-1-5"], news: 3 })], [[], ["den-books", "den-trophy", "den-news"]], "貓窩：學習家具的解鎖條件");
+    const all = new Set(DEN.map((x) => x.id));
+    eq([layoutError([{ id: "den-window", x: 0, y: 0 }, { id: "den-clock", x: 2, y: 2 }], all), layoutError([{ id: "den-clock", x: 0, y: 3 }], all), layoutError([{ id: "den-window", x: 0, y: 2 }], all)], ["", "「掛鐘」要掛在牆上", "「窗戶」要掛在牆上"], "貓窩：牆上的家具只能掛牆上");
+    eq(await (await get("/api/quest/den")).json(), { login: false }, "貓窩：沒登入");
+    eq((await xAdvpost("/api/quest/den/save", { layout: [] })).status, 401, "貓窩：沒登入不能存");
+    const dLg = await fetch(base + "/auth/fake?sub=den-1&email=den@example.com", { redirect: "manual" });
+    const DV = { Cookie: "mt_sess=" + /mt_sess=([^;]+)/.exec(dLg.headers.get("set-cookie"))[1] };
+    const dGet = async () => (await fetch(base + "/api/quest/den", { headers: DV })).json();
+    const d0 = await dGet();
+    ok(d0.login && d0.fish === 0 && d0.owned.length === 0 && d0.unlocked.length === 0 && d0.layout.length === 0 && d0.books.length === 0 && d0.news === 0, "貓窩：一開始是空的 " + JSON.stringify(d0));
+    const dBuy0 = await xAdvpost("/api/quest/den/buy", { item: "den-box" }, DV);
+    ok(dBuy0.status === 400 && (await dBuy0.json()).error.includes("不夠"), "貓窩：小魚乾不夠買不了");
+    await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, DV);
+    eq((await xAdvpost("/api/quest/den/buy", { item: "den-books" }, DV)).status, 400, "貓窩：學習家具不能買");
+    eq((await xAdvpost("/api/quest/den/buy", { item: "hat-cap" }, DV)).status, 400, "貓窩：裝扮不能用這裡買");
+    const dB1 = await (await xAdvpost("/api/quest/den/buy", { item: "den-box" }, DV)).json();
+    ok(dB1.ok && dB1.fish === 30 - DEN_ITEM.get("den-box").price && dB1.owned.includes("den-box"), "貓窩：買紙箱 " + JSON.stringify(dB1));
+    eq((await xAdvpost("/api/quest/den/buy", { item: "den-box" }, DV)).status, 400, "貓窩：已經有的不能再買");
+    const dSave = async (layout) => xAdvpost("/api/quest/den/save", { layout }, DV);
+    const dS1 = await (await dSave([{ id: "den-box", x: 0, y: 3 }])).json();
+    ok(dS1.ok && JSON.stringify(dS1.layout) === JSON.stringify([{ id: "den-box", x: 0, y: 3 }]), "貓窩：存擺設");
+    eq((await dGet()).layout, [{ id: "den-box", x: 0, y: 3 }], "貓窩：擺設有存起來");
+    eq((await dSave([{ id: "den-box", x: 11, y: 5 }])).status, 400, "貓窩：超出房間不行");
+    eq((await dSave([{ id: "den-box", x: 0, y: 8 }])).status, 400, "貓窩：超出房間下面不行");
+    eq((await dSave([{ id: "den-box", x: -1, y: 4 }])).status, 400, "貓窩：負的座標不行");
+    eq((await dSave([{ id: "den-box", x: 0.5, y: 4 }])).status, 400, "貓窩：座標要是整數");
+    eq((await dSave([{ id: "den-box", x: 0, y: 1 }])).status, 400, "貓窩：地板家具不能掛牆上");
+    eq((await dSave([{ id: "den-cushion", x: 4, y: 4 }])).status, 400, "貓窩：沒買的不能擺");
+    eq((await dSave([{ id: "den-books", x: 4, y: 4 }])).status, 400, "貓窩：還沒解鎖的學習家具不能擺");
+    eq((await dSave([{ id: "den-nope", x: 4, y: 4 }])).status, 400, "貓窩：沒有這個家具");
+    eq((await dSave([{ id: "den-box", x: 0, y: 3 }, { id: "den-box", x: 4, y: 4 }])).status, 400, "貓窩：同一件不能擺兩個");
+    eq((await dSave(Array.from({ length: 31 }, () => ({ id: "den-box", x: 0, y: 3 })))).status, 400, "貓窩：最多 30 件");
+    eq((await dSave("nope")).status, 400, "貓窩：格式不對");
+    for (const id of ["cpp-1-2", "cpp-1-3", "cpp-1-4", "cpp-1-5"]) await xAdvpost("/api/quest/clear", { level: id, rule: "back", events: xFast(id) }, DV);
+    const d1 = await dGet();
+    ok(d1.books.includes("cpp-1") && d1.trophies.includes("cpp-1-5") && d1.unlocked.includes("den-books") && d1.unlocked.includes("den-trophy") && !d1.unlocked.includes("den-news") && d1.news === 0, "貓窩：打倒第 1 章 Boss，書櫃多一本書、獎盃架多一座獎盃 " + JSON.stringify(d1));
+    ok(!d1.books.includes("cpp-2") && d1.trophies.length === 1, "貓窩：沒打倒的章不算");
+    const dB2 = await (await xAdvpost("/api/quest/den/buy", { item: "den-cushion" }, DV)).json();
+    ok(dB2.ok && dB2.owned.includes("den-cushion"), "貓窩：買坐墊");
+    eq((await dSave([{ id: "den-box", x: 0, y: 3 }, { id: "den-cushion", x: 1, y: 3 }])).status, 400, "貓窩：家具重疊不行");
+    eq((await dSave([{ id: "den-books", x: 4, y: 4 }, { id: "den-trophy", x: 6, y: 4 }])).status, 400, "貓窩：學習家具也不能重疊");
+    const good = [{ id: "den-box", x: 0, y: 3 }, { id: "den-cushion", x: 2, y: 3 }, { id: "den-books", x: 4, y: 3 }, { id: "den-trophy", x: 7, y: 3 }];
+    const dS2 = await (await dSave(good)).json();
+    ok(dS2.ok && dS2.layout.length === 4, "貓窩：擺學習家具和買來的家具");
+    eq((await dGet()).layout, good, "貓窩：重新讀取擺設一樣");
+    eq((await xAdvpost("/api/quest/den/save", { layout: good })).status, 401, "貓窩：別人（沒登入）不能改");
+    ok(!(await (await fetch(base + "/api/quest/den", { headers: XAV })).json()).owned.includes("den-box"), "貓窩：每個人的家具分開");
+    ok((await get("/den.js")).status === 200 && (await get("/shared/den.js")).status === 200 && (await (await get("/quest")).text()).includes('id="goDen"'), "貓窩：前端程式與按鈕");
+  }
   // 每日新聞
   const nList = await (await fetch(base + "/api/news", { headers: XAV })).json();
   ok(nList.today === twDate() && nList.list.some((n) => n.date === "2026-11-27") && nList.list.every((n) => n.date <= nList.today), "每日新聞列表（不含未來的日期）");

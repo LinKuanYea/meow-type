@@ -282,3 +282,37 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .qrbox{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .qrbox svg{border-radius:8px;border:2px solid var(--line)}
 .qrbox p{flex:1;min-width:200px}
+/* 貓窩 */
+.denwrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,300px);gap:16px;align-items:start;margin-top:10px}
+.denstage canvas{display:block;width:100%;height:auto;aspect-ratio:3/2;image-rendering:pixelated;border:3px solid #6b4524;border-radius:12px;background:#f8e8cc;cursor:pointer;touch-action:manipulation}
+.denstat{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 2px 0;font-size:13px;color:var(--todo)}
+#denSave{color:var(--grass);font-weight:700}
+.denside{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:12px 14px;max-height:520px;overflow:auto}
+.denside h3{margin:0 0 6px;font:400 20px/1.2 "DotGothic16",monospace;color:var(--gin)}
+.denside p{margin:6px 0}
+.denact{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.denside .denact{justify-content:flex-start;margin:6px 0}
+.denact button{font:inherit;font-size:14px;font-weight:700;min-height:36px;padding:0 12px;border-radius:10px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer}
+.denact button.main{background:var(--gin);color:#fff}
+.denact button:disabled{opacity:.5;cursor:not-allowed}
+.denbooks,.dentrophy,.denlearn{list-style:none;margin:6px 0;padding:0}
+.denbooks>li{border-top:1px dashed var(--line);padding:2px 0}
+.denbooks .link{font-size:15px;font-weight:700;text-align:left}
+.denlearn{margin:0 0 8px 8px;display:grid;gap:8px}
+.denlearn li{background:var(--soft);border-radius:10px;padding:6px 10px}
+.denlearn small{display:block;color:var(--todo);font-size:12px}
+.denlearn b{display:block}
+.denlearn p{margin:2px 0 0;font-size:14px}
+.dentrophy li{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;padding:4px 0}
+.dentrophy .glyph{grid-row:span 2;min-width:40px;height:40px;padding:0 4px;border-radius:10px;color:#fff;font:700 16px/40px ui-monospace,Consolas,monospace;text-align:center;text-shadow:0 1px 0 #0006}
+.dentrophy small{color:var(--todo);font-size:12px}
+.denh{margin:22px 0 4px}
+#denList h4{margin:12px 0 8px;font-size:15px;color:var(--todo)}
+.denitems{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.denitem{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:8px;display:grid;gap:4px;justify-items:center;text-align:center;align-content:start}
+.denitem.on{border-color:var(--gin)}
+.denitem.no b{color:var(--todo)}
+.denitem canvas{width:72px;height:72px;image-rendering:pixelated}
+.denitem small{color:var(--todo);font-size:12px;line-height:1.35}
+.denitem small.how{font-size:11px}
+@media (max-width:760px){.denwrap{grid-template-columns:1fr}.denside{max-height:none}}
