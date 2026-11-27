@@ -1,12 +1,13 @@
 // 貓窩裡的貓：走動、用家具的小動作、兩隻貓碰鼻子。只在前端畫圖，不影響伺服器。
 // 每一隻貓是一種擁有的毛色（最多 MAX_CATS 隻）；第一隻是「主貓」，穿玩家現在的裝扮，其他的只有毛色。
+// 走路：在地板格子上找路（shared/den.js 的 findPath），繞過家具和別隻貓；每隻貓佔一格，踏進下一格前要先預定，所以不會疊在一起。
 // 姿勢圖：16 × 12 格，字母和 cat.js 一樣（k 外框、o 毛、w 肚子、e 眼睛、p 鼻子），畫的時候和換裝貓一樣往下 2 格（上面留給帽子）。全部原創。
-import { ROOM, PX, DEN_ITEM, artH } from "/shared/den.js";
+import { ROOM, PX, DEN_ITEM, artH, findPath, floorBlocked } from "/shared/den.js";
 import { ITEM } from "/shared/items.js";
 import { BODY, LEGS, drawDressed } from "/cat.js";
 
 export const MAX_CATS = 5;
-const AW = ROOM.w * PX, AH = ROOM.h * PX, FLOOR_Y = ROOM.wall * PX;
+const AW = ROOM.w * PX;
 const SPEED = 12; // 每秒走幾個像素
 const JUMP_MS = 450;
 
@@ -37,171 +38,244 @@ const FREE = [["groom", 3200], ["stretch", 2000], ["swish", 3000], ["yawn", 2200
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const center = (tx, ty) => ({ x: Math.max(8, Math.min(AW - 8, tx * PX + 4)), y: ty * PX + 6 }); // 貓 16 格寬，靠牆的格子往內一點才不會被切掉
-const tileOf = (p) => ({ tx: Math.max(0, Math.min(ROOM.w - 1, Math.floor(p.x / PX))), ty: Math.max(ROOM.wall, Math.min(ROOM.h - 1, Math.floor((p.y - 1) / PX))) });
-const inRoom = (p) => p.x >= 6 && p.x <= AW - 6;
 
 export class Cats {
-  /** layout()：目前的擺設；front(e, row)：重畫家具某一列以下（紙箱前緣蓋住貓） */
-  constructor(layout, front) { this.layout = layout; this.front = front; this.list = []; this.boops = new Map(); this.still = false; }
+  /** layout()：目前的擺設；front(e, row)：重畫家具某一列以下（紙箱前緣蓋住貓）；say(msg)：給玩家的提示 */
+  constructor(layout, front, say = () => {}) {
+    Object.assign(this, { layout, front, say, list: [], boops: new Map(), still: false, fb: new Set() });
+  }
 
-  /* ---------- 地板與家具 ---------- */
+  /* ---------- 地板、家具、別隻貓 ---------- */
   placed(id) { return this.layout().find((e) => e.id === id); }
-  /** 這一格被不是平的地板家具佔住（地毯可以走） */
-  blocked(tx, ty) {
-    if (tx < 0 || tx >= ROOM.w || ty < ROOM.wall || ty >= ROOM.h) return true;
-    return this.layout().some((e) => { const it = DEN_ITEM.get(e.id); return it.zone === "floor" && !it.flat && tx >= e.x && tx < e.x + it.w && ty >= e.y && ty < e.y + it.h; });
+  refreshFloor() { this.fb = floorBlocked(this.layout()); }
+  /** 家具擋住（或不在地板上）的格子 */
+  furn(tx, ty) { return tx < 0 || tx >= ROOM.w || ty < ROOM.wall || ty >= ROOM.h || this.fb.has(tx + "," + ty); }
+  /** 別隻貓站著、正要踏進去、或預定要去的格子 */
+  catAt(tx, ty, self) { return this.list.some((c) => c !== self && [c.tile, c.next, c.dest].some((k) => k && k.tx === tx && k.ty === ty)); }
+  /** 站在這一格會不會被前面的高家具擋住（例如書櫃、貓跳台的圖蓋過來） */
+  hidden(tx, ty) {
+    return this.layout().some((e) => {
+      const it = DEN_ITEM.get(e.id); if (it.zone !== "floor" || it.flat) return false;
+      const bottom = e.y + it.h - 1, top = e.y + it.h - artH(it);
+      return bottom > ty && tx >= e.x && tx < e.x + it.w && ty >= top - 1;
+    });
   }
-  /** 別隻貓站著或正要去的格子 */
-  taken(tx, ty, self) {
-    return this.list.some((c) => c !== self && [tileOf(c), c.mode === "walk" ? tileOf({ x: c.tx, y: c.ty }) : null].some((t) => t && t.tx === tx && t.ty === ty));
-  }
-  freeTiles(self) {
+  /** 同一列左右隔壁也沒有貓（貓的圖有兩格寬，停下來的地方要留空隙） */
+  roomy(tx, ty, self) { return ![-1, 1].some((d) => this.catAt(tx + d, ty, self)); }
+  freeTiles(self, { roomy = true, visible = true } = {}) {
     const out = [];
-    for (let ty = ROOM.wall; ty < ROOM.h; ty++) for (let tx = 0; tx < ROOM.w; tx++) if (!this.blocked(tx, ty) && !this.taken(tx, ty, self)) out.push({ tx, ty });
+    for (let ty = ROOM.wall; ty < ROOM.h; ty++) for (let tx = 0; tx < ROOM.w; tx++)
+      if (!this.furn(tx, ty) && !this.catAt(tx, ty, self) && (!roomy || this.roomy(tx, ty, self)) && (!visible || !this.hidden(tx, ty))) out.push({ tx, ty });
     return out;
   }
-  /** 一件家具怎麼用：站哪裡、面向哪邊、做什麼（perch＝跳上去的位置） */
-  use(e) {
-    const it = DEN_ITEM.get(e.id), bottom = (e.y + it.h) * PX, top = (e.y + it.h - artH(it)) * PX;
-    if (it.sit) return { stand: { x: e.x * PX + it.sit[0], y: Math.min(AH - 1, bottom + 3) }, perch: { x: e.x * PX + it.sit[0], y: top + it.sit[1] }, act: "nap", face: 1 };
-    if (e.id === "den-scratch" || e.id === "den-plant") {
-      const gap = e.id === "den-scratch" ? 4 : 5, l = { x: e.x * PX - gap, y: bottom, face: 1 }, r = { x: e.x * PX + PX + gap, y: bottom, face: -1 };
-      const s = inRoom(l) ? l : inRoom(r) ? r : null;
-      return s && { stand: { x: s.x, y: s.y }, face: s.face, act: e.id === "den-scratch" ? "scratch" : "plant" };
-    }
-    if (e.id === "den-rug") return { stand: { x: e.x * PX + 8 + Math.round(rand(0, it.w * PX - 16)), y: e.y * PX + 11 }, face: pick([1, -1]), act: "rug" };
-    if (e.id === "den-window") {
-      if (this.blocked(e.x, ROOM.wall) && this.blocked(e.x + 1, ROOM.wall)) return null;
-      return { stand: { x: e.x * PX + 8, y: FLOOR_Y + 6 }, face: 1, act: "window" };
-    }
-    return null;
+  /** 從 from 走到 to 的路：先避開家具和別隻貓；被貓擋住時退而求其次只避開家具（走到前面再等貓讓開） */
+  route(c, from, to, cats = true) {
+    return (cats && findPath(from, to, (x, y) => this.furn(x, y) || this.catAt(x, y, c))) || findPath(from, to, (x, y) => this.furn(x, y));
   }
-  /** 這個點附近有沒有別隻貓（站著的位置或正要走去的位置） */
-  crowded(p, self, r = 9) {
-    return this.list.some((o) => o !== self && [o, o.mode === "walk" ? { x: o.tx, y: o.ty } : null].some((q) => q && Math.abs(q.x - p.x) < r && Math.abs(q.y - p.y) < 6));
+  /** 一件家具可以在哪裡用：[{ tile, face, act, perch?, keep? }]（keep＝坐上去還佔著那一格，例如坐墊） */
+  spots(e) {
+    const it = DEN_ITEM.get(e.id), out = [], add = (tx, ty, o) => { if (!this.furn(tx, ty)) out.push({ tile: { tx, ty }, ...o }); };
+    const top = (e.y + it.h - artH(it)) * PX;
+    if (it.sit) {
+      const perch = { x: e.x * PX + it.sit[0], y: top + it.sit[1] };
+      if (it.walk) { for (let i = 0; i < it.w; i++) add(e.x + i, e.y, { act: "nap", face: 1, perch, keep: true }); }
+      else {
+        for (let i = 0; i < it.w; i++) add(e.x + i, e.y + it.h, { act: "nap", face: 1, perch });
+        add(e.x - 1, e.y, { act: "nap", face: 1, perch }); add(e.x + it.w, e.y, { act: "nap", face: -1, perch });
+      }
+    } else if (e.id === "den-scratch" || e.id === "den-plant") {
+      const act = e.id === "den-scratch" ? "scratch" : "plant";
+      add(e.x - 1, e.y, { act, face: 1 }); add(e.x + 1, e.y, { act, face: -1 });
+    } else if (e.id === "den-rug") {
+      for (let i = 0; i < it.w; i++) for (let j = 0; j < it.h; j++) add(e.x + i, e.y + j, { act: "rug", face: (i + j) % 2 ? 1 : -1 });
+    } else if (e.id === "den-window") {
+      for (let i = 0; i < it.w; i++) add(e.x + i, ROOM.wall, { act: "window", face: 1 });
+    }
+    return out.filter((s) => s.tile.ty >= ROOM.wall && s.tile.ty < ROOM.h);
   }
   claimed(id, self) { return this.list.some((c) => c !== self && c.goal?.id === id); }
+  /** 地板上沒被家具擋住的格子數（拿來判斷房間擠不擠） */
+  floorFree() { let n = 0; for (let ty = ROOM.wall; ty < ROOM.h; ty++) for (let tx = 0; tx < ROOM.w; tx++) if (!this.furn(tx, ty)) n++; return n; }
+  get crowdedRoom() { return this.floorFree() < this.list.length * 6; }
 
   /* ---------- 開始 ---------- */
   /** furs：擁有的毛色；outfit：主貓的裝扮；still：減少動態（不走動、不動畫） */
   reset(furs, outfit, still) {
-    this.still = still;
+    this.still = still; this.refreshFloor();
     const main = outfit?.fur || "fur-orange";
     const all = [main, ...furs.filter((f) => f !== main && ITEM.get(f)?.fur)].slice(0, MAX_CATS);
     const t = performance.now();
     this.list = [];
     all.forEach((fur, i) => {
-      const c = { fur, main: i === 0, outfit: i === 0 ? outfit : { fur }, mode: "idle", until: t + 800 + i * 1100, face: i % 2 ? -1 : 1, x: AW / 2, y: AH - 6 };
-      this.list.push(c);
-      const free = this.freeTiles(c);
-      // 盡量分散：從空格裡平均挑
-      const tile = free.length ? free[Math.floor(((i * 7 + 3) % 11) / 11 * free.length)] : { tx: 6, ty: ROOM.h - 1 };
-      Object.assign(c, center(tile.tx, tile.ty));
+      const c = { fur, main: i === 0, outfit: i === 0 ? outfit : { fur }, mode: "idle", until: t + 800 + i * 1300, face: i % 2 ? -1 : 1, tile: null, next: null, dest: null, path: [], goal: null, perch: null };
+      if (this.placeCat(c, i)) this.list.push(c); // 房間太擠、沒有地方放的貓就先不出來
     });
     if (still) this.stillScene();
+  }
+  /** 找一個地方放貓：分散在看得到的空格；沒有空格就坐到家具上 */
+  placeCat(c, i) {
+    this.list.push(c);
+    let free = this.freeTiles(c);
+    if (!free.length) free = this.freeTiles(c, { roomy: false });
+    this.list.pop();
+    if (free.length) {
+      const k = free[Math.floor((((i * 7 + 3) % 11) / 11) * free.length)];
+      Object.assign(c, center(k.tx, k.ty), { tile: k });
+      return true;
+    }
+    for (const e of this.layout()) {
+      if (!DEN_ITEM.get(e.id).sit || this.claimed(e.id, c) || this.list.some((o) => o.perch === e.id)) continue;
+      const s = this.spots(e)[0];
+      if (!s || (s.keep && this.catAt(s.tile.tx, s.tile.ty, c))) continue;
+      Object.assign(c, s.perch, { perch: e.id, goal: { id: e.id, at: { x: e.x, y: e.y }, spot: s }, tile: s.keep ? s.tile : null, mode: "act", act: { name: "nap", t0: performance.now() - 4000, until: performance.now() + rand(8000, 15000) } });
+      return true;
+    }
+    return false;
   }
   /** 減少動態：主貓坐在第一個能坐的家具上，其他貓坐著或趴著，都不動 */
   stillScene() {
     const poses = ["SIT", "LOAF", "SLEEP", "SIT"];
-    this.list.forEach((c, i) => {
-      c.mode = "act"; c.act = { name: "pose", pose: i ? poses[(i - 1) % poses.length] : "SIT", t0: 0, until: Infinity };
-    });
-    const m = this.list[0], e = this.layout().find((x) => DEN_ITEM.get(x.id).sit);
-    if (m && e) { const u = this.use(e); Object.assign(m, u.perch, { perch: e.id, goal: { id: e.id, at: { x: e.x, y: e.y }, u } }); }
+    this.list.forEach((c, i) => { c.mode = "act"; c.act = { name: "pose", pose: c.perch ? "SLEEP" : i ? poses[(i - 1) % poses.length] : "SIT", t0: 0, until: Infinity }; });
+    const m = this.list[0], e = m && !m.perch && this.layout().find((x) => DEN_ITEM.get(x.id).sit && !this.list.some((o) => o.perch === x.id));
+    const s = e && this.spots(e).find((k) => !k.keep || !this.catAt(k.tile.tx, k.tile.ty, m));
+    if (s) Object.assign(m, s.perch, { perch: e.id, tile: s.keep ? s.tile : null, goal: { id: e.id, at: { x: e.x, y: e.y }, spot: s } });
   }
 
   /* ---------- 行動 ---------- */
-  walk(c, p, goal = null) {
-    if (c.perch) return this.hopDown(c, { p, goal });
-    c.goal = goal;
-    Object.assign(c, { mode: "walk", tx: p.x, ty: p.y, act: null });
-  }
-  hopDown(c, next) {
-    const e = this.placed(c.perch), u = c.goal?.u;
-    const to = e && u ? u.stand : { x: c.x, y: AH - 6 };
-    Object.assign(c, { mode: "jump", from: { x: c.x, y: c.y }, to, t0: performance.now(), perch: null, act: null, next: next || null });
-    if (!next) c.goal = null;
-  }
-  goUse(c, e) {
-    const u = this.use(e);
-    if (!u) return false;
-    this.walk(c, u.stand, { id: e.id, at: { x: e.x, y: e.y }, u });
+  idle(c, t, ms = rand(1500, 4000)) { Object.assign(c, { mode: "idle", until: t + ms, act: null, dest: null, path: [] }); if (!c.perch) c.goal = null; }
+  startAct(c, name, t, ms) { Object.assign(c, { mode: "act", act: { name, t0: t, until: t + ms }, dest: null, path: [] }); }
+  /** 走到 to（格子）；goal＝到了要用的家具。坐在家具上的話先跳下來。回傳 false＝走不到 */
+  walkTo(c, to, goal = null) {
+    if (c.perch) { c.after = { to, goal }; return this.hopDown(c); }
+    const path = this.route(c, c.tile, to);
+    if (!path) return false;
+    Object.assign(c, { mode: "walk", path, dest: to, goal, act: null, waitT: 0, next: null });
+    if (!path.length) this.arrive(c, performance.now());
     return true;
   }
-  wander(c) {
-    const near = (t) => this.crowded(center(t.tx, t.ty), c, 12);
-    const free = this.freeTiles(c).filter((t) => Math.abs(t.tx - tileOf(c).tx) <= 5 && !near(t));
-    if (!free.length) return this.idle(c, performance.now());
-    const t = pick(free); this.walk(c, center(t.tx, t.ty));
+  /** 從家具上跳下來：要有空的格子落地，沒有就繼續待著 */
+  hopDown(c) {
+    const e = this.placed(c.perch), s = c.goal?.spot;
+    let land = s?.keep ? s.tile : null;
+    if (!land && e) land = this.spots(e).map((k) => k.tile).find((k) => !this.catAt(k.tx, k.ty, c));
+    if (!land) land = this.freeTiles(c, { roomy: false, visible: false }).find((k) => Math.abs(center(k.tx, k.ty).x - c.x) <= 16 && Math.abs(center(k.tx, k.ty).y - c.y) <= 16); // 只跳到旁邊的格子
+    if (!land) { this.startAct(c, "nap", performance.now() - 4000, 3000); return false; }
+    Object.assign(c, { mode: "jump", from: { x: c.x, y: c.y }, to: center(land.tx, land.ty), t0: performance.now(), perch: null, act: null, tile: land, landed: "floor" });
+    return true;
   }
-  idle(c, t, ms = rand(1500, 4000)) { Object.assign(c, { mode: "idle", until: t + ms, act: null }); if (!c.perch) c.goal = null; }
-  startAct(c, name, t, ms) { Object.assign(c, { mode: "act", act: { name, t0: t, until: t + ms } }); }
+  /** 到了目的地 */
+  arrive(c, t) {
+    c.dest = null; c.path = [];
+    const s = c.goal?.spot, e = c.goal && this.placed(c.goal.id);
+    if (s && e) {
+      if (s.perch) {
+        Object.assign(c, { mode: "jump", from: { x: c.x, y: c.y }, to: s.perch, t0: t, perch: e.id, landed: "perch" });
+        if (!s.keep) c.tile = null; // 跳上紙箱、貓跳台：地板那一格讓出來
+      } else { c.face = s.face; this.startAct(c, s.act, t, s.act === "window" ? rand(5000, 8000) : s.act === "scratch" ? rand(2500, 4000) : 5000); }
+    } else if (Math.random() < 0.3) { const [name, ms] = pick(FREE); this.startAct(c, name, t, ms); }
+    else this.idle(c, t);
+  }
+  /** 去用家具：挑一個走得到、沒有別隻貓的位置 */
+  goUse(c, e) {
+    const opts = this.spots(e).filter((s) => !this.catAt(s.tile.tx, s.tile.ty, c));
+    const from = c.tile || this.groundOf(c);
+    const reach = opts.map((s) => ({ s, p: from && this.route(c, from, s.tile) })).filter((x) => x.p).sort((a, b) => a.p.length - b.p.length);
+    if (!reach.length) return false;
+    return this.walkTo(c, reach[0].s.tile, { id: e.id, at: { x: e.x, y: e.y }, spot: reach[0].s });
+  }
+  /** 坐在家具上的貓，跳下來大概會在哪一格 */
+  groundOf(c) { const e = c.perch && this.placed(c.perch); if (!e) return null; const s = this.spots(e); return (s.find((k) => !this.catAt(k.tile.tx, k.tile.ty, c)) || s[0])?.tile || null; }
+  wander(c) {
+    const here = c.tile;
+    const free = this.freeTiles(c).map((k) => ({ k, p: here && this.route(c, here, k, true) })).filter((x) => x.p && x.p.length && x.p.length <= 7);
+    if (!free.length) return false;
+    const x = pick(free); return this.walkTo(c, x.k);
+  }
   /** 讓這隻貓放下手邊的事（被主貓搶位置、家具被搬走） */
   release(c) {
-    if (c.perch) this.hopDown(c);
-    else { c.goal = null; this.idle(c, performance.now(), 300); }
+    c.goal = c.perch ? c.goal : null;
+    if (c.perch) this.hopDown(c); else this.idle(c, performance.now(), 300);
   }
+  /** 同時在走的貓（不算主貓） */
+  moving(self) { return this.list.filter((c) => c !== self && !c.main && (c.mode === "walk" || c.mode === "jump")).length; }
   think(c, t) {
-    const r = Math.random();
-    if (r < 0.42) {
-      const opts = this.layout().filter((e) => { const u = !this.claimed(e.id, c) && this.use(e); return u && (u.perch || !this.crowded(u.stand, c)); });
-      if (opts.length && this.goUse(c, pick(opts))) return;
+    const busy = !c.main && this.moving(c) >= 2, crowded = this.crowdedRoom;
+    const perchOpts = () => this.layout().filter((e) => DEN_ITEM.get(e.id).sit && !this.claimed(e.id, c) && !this.list.some((o) => o.perch === e.id));
+    if (!busy) {
+      // 房間擠的時候優先跳到家具上（騰出地板），不然就在原地睡
+      if (crowded && Math.random() < 0.6) { const o = perchOpts(); if (o.length && this.goUse(c, pick(o))) return; }
+      const r = Math.random();
+      if (r < 0.42) {
+        const opts = this.layout().filter((e) => !this.claimed(e.id, c) && !this.list.some((o) => o !== c && o.perch === e.id) && this.spots(e).length);
+        if (opts.length && this.goUse(c, pick(opts))) return;
+      }
+      if (r < (crowded ? 0.55 : 0.75) && this.wander(c)) return;
     }
-    if (r < 0.75) return this.wander(c);
-    const [name, ms] = pick(FREE);
-    this.startAct(c, name, t, ms);
+    if (crowded || busy ? Math.random() < 0.5 : Math.random() < 0.15) return this.startAct(c, "snooze", t, rand(6000, 12000));
+    const [name, ms] = pick(FREE); this.startAct(c, name, t, ms);
   }
 
   /* ---------- 玩家操作（只動主貓） ---------- */
   get mainCat() { return this.list[0]; }
-  /** 叫主貓走到某一格；那一格的別隻貓會讓開 */
+  /** 叫主貓走到某一格。回傳 "" 或走不過去的原因 */
   commandTile(tx, ty) {
     const m = this.mainCat;
-    if (!m || this.blocked(tx, ty)) return false;
-    for (const c of this.list) if (c !== m) { const k = tileOf(c); if ((k.tx === tx && k.ty === ty) || (c.mode === "walk" && tileOf({ x: c.tx, y: c.ty }).tx === tx && tileOf({ x: c.tx, y: c.ty }).ty === ty)) this.wander(c); }
-    if (this.still) { const q = center(tx, ty); this.shooStill(q); Object.assign(m, q, { perch: null, goal: null }); m.act = { name: "pose", pose: "SIT", t0: 0, until: Infinity }; return true; }
-    this.walk(m, center(tx, ty));
-    return true;
+    if (!m) return "走不過去";
+    if (this.furn(tx, ty)) return "走不過去：那裡有家具";
+    const from = m.tile || this.groundOf(m);
+    if (from && !findPath(from, { tx, ty }, (x, y) => this.furn(x, y))) return "走不過去：被家具圍住了";
+    // 那一格的別隻貓讓開
+    for (const c of this.list) if (c !== m && [c.tile, c.dest].some((k) => k && k.tx === tx && k.ty === ty)) {
+      if (this.still) this.shooStill(c, { tx, ty }); else if (!this.wander(c)) return "走不過去：那隻貓不想讓開";
+    }
+    if (this.still) { const q = { tx, ty }; Object.assign(m, center(tx, ty), { tile: q, perch: null, goal: null }); m.act = { name: "pose", pose: "SIT", t0: 0, until: Infinity }; return ""; }
+    return this.walkTo(m, { tx, ty }) ? "" : "走不過去";
   }
-  /** 叫主貓去用某件家具；正在用的別隻貓會讓出來 */
+  /** 叫主貓去用某件家具；正在用的別隻貓會讓出來。回傳 "" 或原因（不能用的家具回傳 null） */
   commandUse(id) {
     const m = this.mainCat, e = this.placed(id);
-    if (!m || !e || !this.use(e)) return false;
-    if (m.goal?.id === id && (m.perch || m.mode === "act")) return true;
-    for (const c of this.list) if (c !== m && c.goal?.id === id) this.release(c);
+    if (!m || !e || !this.spots(e).length) return null;
+    if (m.goal?.id === id && (m.perch || m.mode === "act" || m.mode === "walk")) return "";
+    for (const c of this.list) if (c !== m && (c.goal?.id === id || c.perch === id)) this.release(c);
     if (this.still) {
-      const u = this.use(e);
-      if (!u.perch) this.shooStill(u.stand);
-      Object.assign(m, u.perch || u.stand, { perch: u.perch ? id : null, face: u.face, goal: { id, at: { x: e.x, y: e.y }, u } });
-      m.act = { name: "pose", pose: u.perch ? "SIT" : u.act === "window" ? "LOOK0" : u.act === "scratch" ? "UP0" : "SIT", t0: 0, until: Infinity };
-      return true;
+      const s = this.spots(e).find((k) => !this.catAt(k.tile.tx, k.tile.ty, m)) || this.spots(e)[0];
+      for (const c of this.list) if (c !== m && c.tile && c.tile.tx === s.tile.tx && c.tile.ty === s.tile.ty) this.shooStill(c, s.tile);
+      Object.assign(m, s.perch || center(s.tile.tx, s.tile.ty), { perch: s.perch ? id : null, tile: s.perch && !s.keep ? null : s.tile, face: s.face, goal: { id, at: { x: e.x, y: e.y }, spot: s } });
+      m.act = { name: "pose", pose: s.perch ? "SIT" : s.act === "window" ? "LOOK0" : s.act === "scratch" ? "UP0" : "SIT", t0: 0, until: Infinity };
+      return "";
     }
-    return this.goUse(m, e);
+    if (this.goUse(m, e)) return "";
+    const from = m.tile || this.groundOf(m);
+    return from && this.spots(e).some((k) => findPath(from, k.tile, (x, y) => this.furn(x, y))) ? "走不過去：別隻貓擋住了" : "走不過去：被家具圍住了";
   }
-  /** 減少動態：主貓瞬間移到 p，擋在那裡的別隻貓換到別的空格 */
-  shooStill(p) {
-    for (const o of this.list) if (o !== this.mainCat && !o.perch && Math.abs(o.x - p.x) < 12 && Math.abs(o.y - p.y) < 6) {
-      const t = this.freeTiles(o).find((k) => !this.crowded(center(k.tx, k.ty), o, 14) && !(Math.abs(center(k.tx, k.ty).x - p.x) < 14 && Math.abs(center(k.tx, k.ty).y - p.y) < 6));
-      if (t) Object.assign(o, center(t.tx, t.ty));
-    }
+  /** 減少動態：被擠走的貓換到一個看得到、沒被家具擋住的空格（避開 avoid） */
+  shooStill(c, avoid) {
+    const ok = (k) => !(avoid && k.tx === avoid.tx && k.ty === avoid.ty) && !(avoid && Math.abs(k.tx - avoid.tx) <= 1 && k.ty === avoid.ty);
+    const free = this.freeTiles(c).filter(ok).concat(this.freeTiles(c, { roomy: false }).filter(ok));
+    if (free.length) { const k = free[0]; Object.assign(c, center(k.tx, k.ty), { tile: k }); }
   }
   /** 方向鍵：主貓走一格 */
   step(dx, dy) {
-    const m = this.mainCat; if (!m) return false;
-    const base = m.mode === "walk" ? { x: m.tx, y: m.ty } : m.perch && m.goal?.u ? m.goal.u.stand : m;
-    const t = tileOf(base);
-    return this.commandTile(t.tx + dx, t.ty + dy);
+    const m = this.mainCat; if (!m) return "走不過去";
+    const base = m.dest || m.tile || this.groundOf(m);
+    if (!base) return "走不過去";
+    return this.commandTile(base.tx + dx, base.ty + dy);
   }
-  /** 擺設改了：用到被搬走的家具的貓回到地板 */
+  /** 擺設改了：被家具壓到、或用到被搬走家具的貓，移到最近的空格 */
   fix() {
+    this.refreshFloor();
     for (const c of this.list) {
       const e = c.goal && this.placed(c.goal.id);
-      if (c.goal && (!e || e.x !== c.goal.at.x || e.y !== c.goal.at.y)) {
-        const wasUp = c.perch || c.y < FLOOR_Y + 4;
-        Object.assign(c, { perch: null, goal: null, next: null });
-        if (wasUp) c.y = Math.max(c.y, FLOOR_Y + 6) > AH - 2 ? AH - 6 : Math.max(c.y + 8, FLOOR_Y + 6);
+      const lost = c.goal && (!e || e.x !== c.goal.at.x || e.y !== c.goal.at.y);
+      if (lost || (c.tile && this.furn(c.tile.tx, c.tile.ty))) {
+        Object.assign(c, { perch: null, goal: null, next: null, dest: null, path: [], tile: null });
+        const near = this.freeTiles(c, { roomy: false }).sort((a, b) => Math.abs(a.tx * PX - c.x) + Math.abs(a.ty * PX - c.y) - Math.abs(b.tx * PX - c.x) - Math.abs(b.ty * PX - c.y))[0];
+        if (near) Object.assign(c, center(near.tx, near.ty), { tile: near });
         if (this.still) { c.act = { name: "pose", pose: "SIT", t0: 0, until: Infinity }; c.mode = "act"; }
         else this.idle(c, performance.now(), 500);
+      } else if (c.mode === "walk" && c.dest) { // 路可能被新家具擋住：重新找路
+        const p = this.route(c, c.next || c.tile, c.dest);
+        if (p) c.path = p; else this.idle(c, performance.now(), 500);
       }
     }
   }
@@ -211,48 +285,52 @@ export class Cats {
     if (this.still) return;
     for (const c of this.list) {
       if (c.mode === "idle" && t > c.until) this.think(c, t);
-      else if (c.mode === "walk") {
-        const dx = c.tx - c.x, dy = c.ty - c.y, d = Math.hypot(dx, dy), s = SPEED * dt;
-        if (Math.abs(dx) > 0.5) c.face = dx < 0 ? -1 : 1;
-        if (d > s) { c.x += (dx / d) * s; c.y += (dy / d) * s; continue; }
-        c.x = c.tx; c.y = c.ty;
-        const o = this.list.find((x) => x !== c && !x.perch && x.mode !== "jump" && Math.abs(x.x - c.x) < 7 && Math.abs(x.y - c.y) < 5);
-        if (o) { // 不要疊在一起：在忙的（或主貓）留著，另一隻讓開
-          if (!c.main && (o.main || o.mode === "act")) { this.wander(c); continue; }
-          this.wander(o);
-        }
-        const u = c.goal?.u, e = c.goal && this.placed(c.goal.id);
-        if (u && e) {
-          if (u.perch) Object.assign(c, { mode: "jump", from: { x: c.x, y: c.y }, to: u.perch, t0: t, perch: e.id, next: null });
-          else { c.face = u.face; this.startAct(c, u.act, t, u.act === "window" ? rand(5000, 8000) : u.act === "scratch" ? rand(2500, 4000) : 5000); }
-        } else if (Math.random() < 0.3) { const [name, ms] = pick(FREE); this.startAct(c, name, t, ms); }
-        else this.idle(c, t);
-      } else if (c.mode === "jump" && t - c.t0 > JUMP_MS) {
+      else if (c.mode === "walk") this.walkStep(c, t, dt);
+      else if (c.mode === "jump" && t - c.t0 > JUMP_MS) {
         Object.assign(c, c.to);
-        if (c.next) { const n = c.next; c.next = null; c.mode = "idle"; this.walk(c, n.p, n.goal); }
-        else if (c.perch) this.startAct(c, "nap", t, rand(7000, 13000));
-        else this.idle(c, t, 1200);
+        if (c.landed === "perch") this.startAct(c, "nap", t, rand(7000, 13000));
+        else if (c.after) { const a = c.after; c.after = null; c.mode = "idle"; if (!this.walkTo(c, a.to, a.goal)) { if (c.main) this.say("走不過去：被家具圍住了"); this.idle(c, t, 1000); } }
+        else { c.goal = null; this.idle(c, t, 1200); }
       } else if (c.mode === "act" && t > c.act.until) {
-        if (c.perch) this.hopDown(c);
+        if (c.perch) { if (!this.hopDown(c)) c.act.until = t + 3000; }
         else this.idle(c, t);
       }
     }
     this.meet(t);
   }
-  /** 兩隻貓走近了：有時候碰碰鼻子 */
+  /** 沿著路一格一格走：下一格要先預定好；被別隻貓擋住就等一下，等太久重新找路，找不到就放棄 */
+  walkStep(c, t, dt) {
+    if (!c.next) {
+      if (!c.path.length) return this.arrive(c, t);
+      const k = c.path[0];
+      if (this.furn(k.tx, k.ty) || this.list.some((o) => o !== c && [o.tile, o.next].some((q) => q && q.tx === k.tx && q.ty === k.ty))) {
+        c.waitT = c.waitT || t;
+        if (t - c.waitT > 1200) {
+          c.waitT = 0;
+          const p = findPath(c.tile, c.dest, (x, y) => this.furn(x, y) || this.catAt(x, y, c));
+          if (p) c.path = p;
+          else { if (c.main) this.say("走不過去：被別隻貓擋住了"); this.idle(c, t, rand(1500, 3000)); }
+        }
+        return;
+      }
+      c.waitT = 0; c.next = c.path.shift();
+    }
+    const p = center(c.next.tx, c.next.ty), dx = p.x - c.x, dy = p.y - c.y, d = Math.hypot(dx, dy), s = SPEED * dt;
+    if (Math.abs(dx) > 0.5) c.face = dx < 0 ? -1 : 1;
+    if (d > s) { c.x += (dx / d) * s; c.y += (dy / d) * s; return; }
+    Object.assign(c, p, { tile: c.next, next: null });
+  }
+  /** 兩隻貓在同一列、隔一格停著：有時候碰碰鼻子 */
   meet(t) {
     const L = this.list;
     for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
       const a = L[i], b = L[j], key = a.fur + "|" + b.fur;
-      if (!["idle", "walk"].includes(a.mode) || !["idle", "walk"].includes(b.mode) || a.perch || b.perch) continue;
-      const gap = Math.abs(a.x - b.x);
-      if (gap < 13 || gap > 24 || Math.abs(a.y - b.y) > 5 || (this.boops.get(key) || 0) > t) continue;
-      if (L.some((o) => o !== a && o !== b && !o.perch && Math.abs(o.x - (a.x + b.x) / 2) < 18 && Math.abs(o.y - a.y) < 6)) continue; // 旁邊還有別隻貓就不碰
+      if (a.mode !== "idle" || b.mode !== "idle" || a.perch || b.perch || !a.tile || !b.tile) continue;
+      if (a.tile.ty !== b.tile.ty || Math.abs(a.tile.tx - b.tile.tx) !== 2 || (this.boops.get(key) || 0) > t) continue;
       this.boops.set(key, t + 20000);
       if (Math.random() < 0.4) continue;
-      // 面對面、各往前挪幾格讓鼻子碰在一起（不會挪到別隻貓身上）
-      const [l, r] = a.x <= b.x ? [a, b] : [b, a], d = (r.x - l.x - 16) / 2, y = (l.y + r.y) / 2;
-      Object.assign(l, { x: l.x + d, y, face: 1, goal: null }); Object.assign(r, { x: r.x - d, y, face: -1, goal: null });
+      const [l, r] = a.x <= b.x ? [a, b] : [b, a];
+      Object.assign(l, { face: 1, goal: null }); Object.assign(r, { face: -1, goal: null });
       this.startAct(l, "boop", t, 1800); this.startAct(r, "boop", t, 1800); l.act.heart = (l.x + r.x) / 2;
     }
   }
@@ -276,7 +354,7 @@ export class Cats {
     const a = c.act, el = t - a.t0, alt = (ms, p, q) => (Math.floor(el / ms) % 2 ? q : p);
     switch (a.name) {
       case "pose": return a.pose;
-      case "nap": return el < 2000 ? "SIT" : el < 4000 ? "LOAF" : "SLEEP";
+      case "nap": case "snooze": return el < 2000 ? "SIT" : el < 4000 ? "LOAF" : "SLEEP";
       case "scratch": return alt(180, "UP0", "UP1");
       case "plant": return el < 1500 ? "SNIFF" : alt(260, "BACK0", "BACK1");
       case "rug": return el < 2600 ? alt(300, "BACK0", "BACK1") : "STRETCH";
@@ -305,7 +383,7 @@ export class Cats {
     if (this.still || c.mode !== "act") return;
     const a = c.act, el = t - a.t0, dot = (x, y, col) => { ctx.fillStyle = col; ctx.fillRect(x * K, y * K, K, K); };
     const sprite = (S, x, y, col) => S.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") dot(x + i, y + j, col); }));
-    if (a.name === "nap" && el > 4000) { // 睡著了 zzz
+    if ((a.name === "nap" || a.name === "snooze") && el > 4000) { // 睡著了 zzz
       const k = Math.floor(el / 700) % 3;
       for (let n = 0; n <= k; n++) sprite(ZZ, Math.round(p.x) + (flip && p.x > 24 ? -10 - n * 8 : 6) + n * 4, Math.round(p.y) - 14 - n * 5, "#6b5a8e");
     }

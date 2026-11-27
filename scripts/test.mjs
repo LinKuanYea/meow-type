@@ -477,7 +477,7 @@ try {
   ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).fish >= 0, "小魚乾不會變負的");
   // 貓窩：家具目錄、購買、擺設
   {
-    const { DEN, DEN_ITEM, ROOM, PX, artH, unlockedOf, layoutError } = await import("../shared/den.js");
+    const { DEN, DEN_ITEM, ROOM, PX, artH, unlockedOf, layoutError, findPath, floorBlocked } = await import("../shared/den.js");
     ok(new Set(DEN.map((x) => x.id)).size === DEN.length && DEN.every((x) => x.id.startsWith("den-") && x.name && x.how), "貓窩：家具 id 不重複、以 den- 開頭、有名稱和取得方式");
     for (const it of DEN) {
       ok(Number.isInteger(it.w) && Number.isInteger(it.h) && it.w > 0 && it.h > 0 && ["floor", "wall"].includes(it.zone), `${it.id}：大小與位置`);
@@ -488,6 +488,26 @@ try {
     }
     ok(DEN.filter((x) => !x.learn).length >= 8 && ["den-books", "den-trophy", "den-news"].every((id) => DEN_ITEM.get(id)?.learn), "貓窩：3 件學習家具、8 件以上商店家具");
     eq([unlockedOf({ books: [], trophies: [], news: 2 }), unlockedOf({ books: ["cpp-1"], trophies: ["cpp-1-5"], news: 3 })], [[], ["den-books", "den-trophy", "den-news"]], "貓窩：學習家具的解鎖條件");
+    // 貓找路
+    {
+      const step1 = (p, from) => p.every((k, i) => { const q = i ? p[i - 1] : from; return Math.abs(k.tx - q.tx) + Math.abs(k.ty - q.ty) === 1; });
+      const wall = new Set(["5,3", "5,4", "5,5", "5,6"]), bl = (x, y) => wall.has(x + "," + y);
+      const p1 = findPath({ tx: 3, ty: 4 }, { tx: 7, ty: 4 }, bl);
+      ok(p1 && step1(p1, { tx: 3, ty: 4 }) && p1.every((k) => !bl(k.tx, k.ty)) && p1.at(-1).tx === 7 && p1.at(-1).ty === 4, "貓找路：繞過擋住的格子 " + JSON.stringify(p1));
+      eq(p1.length, 10, "貓找路：走最短的路");
+      ok(p1.every((k) => k.ty >= ROOM.wall && k.ty < ROOM.h && k.tx >= 0 && k.tx < ROOM.w), "貓找路：只走地板");
+      eq(findPath({ tx: 3, ty: 4 }, { tx: 7, ty: 4 }, (x, y) => x === 5), null, "貓找路：整排擋住就走不到");
+      eq(findPath({ tx: 3, ty: 4 }, { tx: 7, ty: 4 }, (x, y) => x === 7 && y === 4), null, "貓找路：終點被佔住就走不到");
+      eq(findPath({ tx: 3, ty: 4 }, { tx: 3, ty: 1 }, () => false), null, "貓找路：牆上走不到");
+      eq(findPath({ tx: 3, ty: 4 }, { tx: 3, ty: 4 }, () => false), [], "貓找路：已經在那裡");
+      const res = new Set(["4,4", "4,5", "3,5", "4,3"]), p2 = findPath({ tx: 3, ty: 4 }, { tx: 6, ty: 4 }, (x, y) => res.has(x + "," + y));
+      ok(p2 && step1(p2, { tx: 3, ty: 4 }) && !p2.some((k) => res.has(k.tx + "," + k.ty)), "貓找路：不會踩到別隻貓預定的格子 " + JSON.stringify(p2));
+      const fb = floorBlocked([{ id: "den-box", x: 0, y: 6 }, { id: "den-rug", x: 4, y: 5 }, { id: "den-cushion", x: 9, y: 7 }, { id: "den-window", x: 4, y: 0 }, { id: "den-tower", x: 7, y: 3 }]);
+      eq([...fb].sort(), ["0,6", "1,6", "7,3", "8,3"], "貓找路：紙箱、貓跳台擋路，地毯、坐墊可以走過去，牆上的不算");
+      const lay = [{ id: "den-books", x: 0, y: 3 }, { id: "den-trophy", x: 3, y: 3 }, { id: "den-tower", x: 6, y: 3 }, { id: "den-box", x: 8, y: 3 }];
+      const fb2 = floorBlocked(lay), p3 = findPath({ tx: 0, ty: 7 }, { tx: 11, ty: 3 }, (x, y) => fb2.has(x + "," + y));
+      ok(p3 && !p3.some((k) => fb2.has(k.tx + "," + k.ty)), "貓找路：靠牆一排家具也繞得過去");
+    }
     const all = new Set(DEN.map((x) => x.id));
     eq([layoutError([{ id: "den-window", x: 0, y: 0 }, { id: "den-clock", x: 2, y: 2 }], all), layoutError([{ id: "den-clock", x: 0, y: 3 }], all), layoutError([{ id: "den-window", x: 0, y: 2 }], all)], ["", "「掛鐘」要掛在牆上", "「窗戶」要掛在牆上"], "貓窩：牆上的家具只能掛牆上");
     eq(await (await get("/api/quest/den")).json(), { login: false }, "貓窩：沒登入");

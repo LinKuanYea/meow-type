@@ -2,6 +2,7 @@
 // 房間是 ROOM.w × ROOM.h 格；最上面 ROOM.wall 列是牆，下面是地板。
 // 家具的圖：每格 8 × 8 個像素（PX），所以每一列的字元數是 w × 8；"." 是透明，其他字母查 pal 的顏色。
 // 地板家具的圖可以比佔的格子高（例如貓跳台佔 2 × 1 格、圖有 2 × 4 格高）：圖的下緣對齊佔的格子，多出來的往上畫（像站在牆前面）。
+// walk ＝ 貓可以從上面走過去（地毯、坐墊）；其他地板家具會擋路，貓要繞過去。
 // 取得方式：learn ＝ 跟學習進度連動（免費、不能買，由伺服器依進度解鎖）；price ＝ 用小魚乾買（和裝扮同一份小魚乾）。
 
 export const ROOM = { w: 12, h: 8, wall: 3 };
@@ -125,7 +126,7 @@ export const DEN = [
     ],
   },
   {
-    id: "den-cushion", name: "坐墊", w: 2, h: 1, zone: "floor", price: 25, sit: [8, 4], how: "軟軟的圓坐墊",
+    id: "den-cushion", name: "坐墊", w: 2, h: 1, zone: "floor", price: 25, sit: [8, 4], walk: true, how: "軟軟的圓坐墊",
     pal: { k: "#9c3f55", p: "#f08da0", l: "#f9c0cb", y: "#f5c542" },
     art: [
       "................",
@@ -183,7 +184,7 @@ export const DEN = [
     ],
   },
   {
-    id: "den-rug", name: "地毯", w: 4, h: 2, zone: "floor", price: 40, flat: true, how: "暖暖的條紋地毯，中間有腳印",
+    id: "den-rug", name: "地毯", w: 4, h: 2, zone: "floor", price: 40, flat: true, walk: true, how: "暖暖的條紋地毯，中間有腳印",
     pal: { k: "#8a3b2a", r: "#d9634a", o: "#f2a03d", c: "#fbe3b8", p: "#8a3b2a" },
     art: [
       "................................",
@@ -320,4 +321,42 @@ export function cleanLayout(layout, have) {
     if (!layoutError([...out, one], have)) out.push(one);
   }
   return out;
+}
+
+/* ---------- 貓走路：地板格子上找路 ---------- */
+/** 被地板家具擋住的格子（"x,y"）；地毯、坐墊這種 walk 的家具不擋 */
+export function floorBlocked(layout) {
+  const out = new Set();
+  for (const e of Array.isArray(layout) ? layout : []) {
+    const it = DEN_ITEM.get(e?.id);
+    if (!it || it.zone !== "floor" || it.walk) continue;
+    for (let i = 0; i < it.w; i++) for (let j = 0; j < it.h; j++) out.add((e.x + i) + "," + (e.y + j));
+  }
+  return out;
+}
+/**
+ * 在地板上找最短路（上下左右走，BFS）。from、to ＝ { tx, ty }；blocked(tx, ty) 回傳 true 的格子不能走（家具、別隻貓佔著或預定的格子）。
+ * 回傳經過的格子（不含起點、含終點），起點就是終點回傳 []；走不到（或終點被擋）回傳 null。
+ */
+export function findPath(from, to, blocked) {
+  const inFloor = (x, y) => x >= 0 && x < ROOM.w && y >= ROOM.wall && y < ROOM.h;
+  if (!from || !to || !inFloor(to.tx, to.ty)) return null;
+  if (from.tx === to.tx && from.ty === to.ty) return [];
+  if (blocked(to.tx, to.ty)) return null;
+  const prev = new Map([[from.tx + "," + from.ty, null]]), q = [[from.tx, from.ty]];
+  for (let k = 0; k < q.length; k++) {
+    const [x, y] = q[k];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, id = nx + "," + ny;
+      if (!inFloor(nx, ny) || prev.has(id) || blocked(nx, ny)) continue;
+      prev.set(id, x + "," + y);
+      if (nx === to.tx && ny === to.ty) {
+        const path = [];
+        for (let c = id; c !== from.tx + "," + from.ty; c = prev.get(c)) { const [a, b] = c.split(",").map(Number); path.unshift({ tx: a, ty: b }); }
+        return path;
+      }
+      q.push([nx, ny]);
+    }
+  }
+  return null;
 }
