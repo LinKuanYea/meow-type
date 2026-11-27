@@ -12,6 +12,7 @@ import { TypeBox } from "/typebox.js";
 import { learnCard } from "/learn.js";
 import { videoPanel, canMakeVideo } from "/vidui.js";
 import { openDen } from "/den.js";
+import { BOSS, BOSS_RULE, DAILY_CAP, BOSS_FISH, randomPiece, accBonus } from "/shared/boss.js";
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -64,8 +65,9 @@ const starsTxt = (n, max = 3) => "★".repeat(n) + "☆".repeat(max - n);
 let island = store.get("mt-adv-island", "cpp");
 function renderMap() {
   show("map");
-  $("#islands").innerHTML = `<button type="button" data-v="news" aria-pressed="${island === "news"}">📰 每日新聞</button>` + ISLANDS.map((is) => `<button type="button" data-v="${is.id}" aria-pressed="${is.id === island}"${is.open ? "" : ' class="soon"'}>${esc(is.name)}${is.open ? "" : "（準備中）"}</button>`).join("");
+  $("#islands").innerHTML = `<button type="button" data-v="boss" aria-pressed="${island === "boss"}">🌍 世界 Boss</button><button type="button" data-v="news" aria-pressed="${island === "news"}">📰 每日新聞</button>` + ISLANDS.map((is) => `<button type="button" data-v="${is.id}" aria-pressed="${is.id === island}"${is.open ? "" : ' class="soon"'}>${esc(is.name)}${is.open ? "" : "（準備中）"}</button>`).join("");
   if (island === "news") return renderNews();
+  if (island === "boss") return renderBoss();
   const is = ISLANDS.find((x) => x.id === island) || ISLANDS[0];
   $("#mapHint").innerHTML = !is.open ? "這座島還在蓋，先到 C++ 島冒險吧！"
     : `${STAR_RULE}。${ST.login ? "" : `<b>沒登入只能玩第 1 章，也拿不到小魚乾和裝扮。</b><button type="button" class="link" id="mapLogin">用 Google 登入</button>`}`;
@@ -86,7 +88,9 @@ $("#islands").addEventListener("click", (e) => {
 });
 $("#chapters").addEventListener("click", (e) => {
   const b = e.target.closest("[data-lv]"); if (b && !b.disabled) return play(LEVELS.get(b.dataset.lv));
-  const n = e.target.closest("[data-news]"); if (n) playNews(n.dataset.news);
+  const n = e.target.closest("[data-news]"); if (n) return playNews(n.dataset.news);
+  if (e.target.closest("#wbGo")) return playBoss();
+  if (e.target.closest("#wbSeen")) return bossSeen();
 });
 
 /* ---------- 每日新聞 ---------- */
@@ -128,6 +132,123 @@ function newsLearn(n) {
     <h3>讀懂了嗎？</h3>${n.questions.map((q, i) => `<fieldset class="nq" data-a="${q.answer}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label><input type="radio" name="nq${i}" value="${k}"> ${esc(o)}</label>`).join("")}<p class="why" hidden>${esc(q.why)}</p></fieldset>`).join("")}
     <p class="hint">原始報導：${n.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}（這篇是用自己的話改寫的練習文章）</p></div>`;
 }
+/* ---------- 世界 Boss（shared/boss.js、server/boss.js） ---------- */
+let WB = null, wbTimer = 0, wbLast = "";
+const WB_POLL = 12000;
+function drawBossArt(cv, b) {
+  const c = cv.getContext("2d"), s = Math.floor(Math.min(cv.width / 16, cv.height / 14));
+  const n = parseInt(b.color.slice(1), 16), dk = `rgb(${Math.round((n >> 16) * 0.65)},${Math.round(((n >> 8) & 255) * 0.65)},${Math.round((n & 255) * 0.65)})`;
+  const pal = { b: b.color, d: dk, w: "#fff", e: "#1a1a1a", m: "#5a1a1a", p: "#f4a0b0" };
+  c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
+  const ox = (cv.width - 16 * s) / 2, oy = (cv.height - 14 * s) / 2;
+  b.art.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") { c.fillStyle = pal[ch]; c.fillRect(ox + i * s, oy + j * s, s, s); } }));
+  c.fillStyle = "rgba(255,255,255,.92)"; c.font = `bold ${s * 3.2}px ui-monospace, Consolas, monospace`; c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillText(b.glyph, ox + 8 * s, oy + 10.8 * s);
+}
+const leftTxt = (ms) => { if (ms <= 0) return "這週結束了"; const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000); return d ? `還剩 ${d} 天 ${h} 小時` : h ? `還剩 ${h} 小時` : `還剩 ${Math.max(1, Math.round(ms / 60000))} 分鐘`; };
+const agoTxt = (ms) => (ms < 60000 ? "剛剛" : ms < 3600000 ? `${Math.floor(ms / 60000)} 分鐘前` : ms < 86400000 ? `${Math.floor(ms / 3600000)} 小時前` : `${Math.floor(ms / 86400000)} 天前`);
+async function renderBoss() {
+  $("#mapHint").innerHTML = `每週一隻世界 Boss，<b>全部登入的人一起打同一隻</b>、共用血條（台灣時間週一 00:00 到週日 23:59）。${esc(BOSS_RULE)}`
+    + (ST.login ? "" : `<b>要登入才能出擊</b>（沒登入可以看血條和排行）。<button type="button" class="link dologin">用 Google 登入</button>`);
+  if (!WB) $("#chapters").innerHTML = '<p class="empty">載入中…</p>';
+  await refreshBoss(true);
+  clearInterval(wbTimer);
+  wbTimer = setInterval(() => { if (island !== "boss" || $("#map").hidden) return clearInterval(wbTimer); if (!document.hidden) refreshBoss(); }, WB_POLL);
+}
+async function refreshBoss(full) {
+  const r = online ? await api("/api/boss") : { error: "要連上伺服器" };
+  if (island !== "boss" || $("#map").hidden) return;
+  if (r.error) { if (!WB) $("#chapters").innerHTML = `<p class="empty">${esc(r.error)}</p>`; return; }
+  const changed = !WB || WB.week !== r.week || !!WB.rewards?.length !== !!r.rewards?.length;
+  WB = r;
+  if (full || changed || !$("#wbBody")) bossShell();
+  bossLive();
+}
+/** 不會跟著輪詢變的部分：Boss 的樣子、介紹、獎勵通知 */
+function bossShell() {
+  const r = WB, b = r.boss, rw = r.rewards || [];
+  $("#chapters").innerHTML = `<div class="wb" id="wbBody">
+    ${rw.length ? `<div class="wb-gift" role="status"><canvas id="wbGiftCv" width="120" height="105" aria-hidden="true"></canvas><div><h3>🎉 世界 Boss 被打倒了！</h3>${rw.map((x) => `<p>「${esc(x.boss)}」（${x.week.slice(5).replace("-", "/")} 那週）：你造成 ${x.dmg} 傷害${x.rank ? `，<b>第 ${x.rank} 名</b>` : ""}，拿到 🐟 ${x.fish} 條小魚乾${x.item ? `＋限定${x.item.kind === "den" ? "家具" : "裝扮"}「<b>${esc(x.item.name)}</b>」` : ""}！</p>`).join("")}
+      <button type="button" class="main" id="wbSeen">收下</button></div></div>` : ""}
+    <div class="wb-head"><canvas id="wbCv" width="160" height="140" aria-label="${esc(b.name)}的樣子"></canvas>
+      <div><p class="wb-tag">本週世界 Boss・主題 <b>${esc(b.themeName)}</b></p><h3>${esc(b.name)}</h3><p>${esc(b.intro)}</p>
+      ${b.item ? `<p class="hint">打倒的獎勵：每個有造成傷害的人 🐟 ${BOSS_FISH.clear} 條＋限定${b.item.kind === "den" ? "貓窩家具" : "裝扮"}「${esc(b.item.name)}」；傷害前 3 名再加 ${BOSS_FISH.top.join("、")} 條。週日還沒打倒，Boss 就會逃走。</p>` : ""}</div></div>
+    <div class="wb-hp"><div class="wb-bar" role="progressbar" aria-label="Boss 剩下的血" aria-valuemin="0" id="wbBar"><i id="wbFill" style="width:${r.hp ? ((r.left / r.hp) * 100).toFixed(2) : 0}%"></i></div><p><b id="wbLeft"></b><span id="wbTime"></span></p></div>
+    <div class="wb-me" id="wbMe"></div>
+    <div class="wb-grid"><div class="board"><h4>本週傷害排行</h4><div id="wbTop"></div></div><div class="board"><h4>最近的攻擊</h4><ul class="wb-feed" id="wbFeed"></ul></div></div>
+  </div>`;
+  drawBossArt($("#wbCv"), b);
+  if (rw.length && rw[0].item) {
+    const it = rw[0].item, c = $("#wbGiftCv").getContext("2d"); c.imageSmoothingEnabled = false;
+    if (it.kind === "outfit") drawDressed(c, 4, 0, 7, 0, { ...ST.outfit, [ITEM.get(it.id).slot]: it.id });
+    else { c.font = "64px system-ui, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("🏠", 60, 54); }
+  }
+}
+/** 跟著輪詢更新的部分：血條、剩幾天、我的傷害、排行、最近的攻擊 */
+function bossLive() {
+  const r = WB, el = $("#wbBody"); if (!el) return;
+  const pct = r.hp ? (r.left / r.hp) * 100 : 0;
+  $("#wbFill").style.width = pct.toFixed(2) + "%";
+  $("#wbBar").setAttribute("aria-valuemax", r.hp); $("#wbBar").setAttribute("aria-valuenow", r.left);
+  $("#wbLeft").textContent = r.defeated ? `已經被打倒了！（${r.players} 人合力）` : `${r.left.toLocaleString()} / ${r.hp.toLocaleString()} 血・${r.players} 人參戰`;
+  $("#wbTime").textContent = r.defeated ? "　下週一換新的 Boss" : "　" + leftTxt(r.end - r.now);
+  const me = r.me;
+  $("#wbMe").innerHTML = !r.login ? `<p>登入後就能出擊，一起打倒${esc(r.boss.name)}！</p><button type="button" class="main dologin">用 Google 登入</button>`
+    : `<div class="big"><div><small>我的傷害</small><strong>${me.dmg}</strong></div><div class="s"><small>名次</small><strong>${me.rank ? `第 ${me.rank} 名` : "—"}</strong></div><div class="s"><small>今天算傷害的次數</small><strong>${me.today} / ${r.cap}</strong></div></div>
+      ${r.defeated ? `<p class="hint">這週的 Boss 已經倒下了，下週一再來！</p>` : `<button type="button" class="main" id="wbGo">⚔️ 出擊！</button><p class="hint">${me.today >= r.cap ? `今天的 ${r.cap} 次已經用完了：還可以打，但不會扣血、沒有小魚乾，明天再來。` : `每次打一段 ${esc(r.boss.themeName)}（從題庫隨機抽），打完就攻擊。`}</p>`}`;
+  $("#wbTop").innerHTML = r.top.length ? `<table class="lb"><tbody>${r.top.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}${x.me ? "（你）" : ""}</td><td class="n">${x.dmg}</td></tr>`).join("")}</tbody></table>` : '<p class="empty">還沒有人出擊，搶第一個！</p>';
+  $("#wbFeed").innerHTML = r.recent.length ? r.recent.map((x) => `<li><b>${esc(x.name)}</b> 造成 <b>${x.dmg}</b> 傷害<span class="hint">　${agoTxt(r.now - x.ts)}</span></li>`).join("") : '<li class="empty">還沒有攻擊紀錄</li>';
+}
+async function bossSeen() {
+  const r = await api("/api/boss/seen", {});
+  if (r.error) return toast(r.error);
+  await loadState(); toast("收下了！裝扮到「換裝」、家具到「貓窩」看看");
+  WB = null; renderBoss();
+}
+function playBoss() {
+  if (!ST.login) return login();
+  const r = WB, p = randomPiece(r.boss.theme, wbLast); wbLast = p.id;
+  play({ id: "world-boss", world: { piece: p.id, hp: r.hp, left: r.left }, name: r.boss.name, lang: p.lang, texts: p.texts, segs: [p.texts], chars: p.chars, from: p.from,
+    boss: { name: r.boss.name, glyph: r.boss.glyph, color: r.boss.color, art: r.boss.art }, big: true, target: 0, chapter: "boss", index: 0 }, 0);
+}
+async function bossFinish(lv, sum) {
+  const run = R; run.waiting = true;
+  $("#res").innerHTML = `<div class="res"><h2>結算中…</h2></div>`; $("#res").hidden = false;
+  const events = R.ty.events.slice(), rule = R.rule;
+  const o = online ? await api("/api/boss/hit", { piece: lv.world.piece, rule, events }) : { error: "要連上伺服器" };
+  run.waiting = false;
+  if (!o.error) {
+    ST.fish = o.total; $("#fish").textContent = `🐟 ${ST.fish}`;
+    WB = o.state;
+    battle.hp = Math.max(1, o.state.hp); battle.left = o.state.left;
+    if (o.killed || o.state.defeated) battle.win(now());
+    if (!o.flagged) rememberSpeed(lv.lang, o.speed);
+  }
+  if (R !== run) return;
+  const why = o.error ? "" : o.flagged ? "這次的打字節奏不太像人打的，不算傷害。"
+    : o.over ? `今天已經出擊 ${o.cap} 次了，這次不扣血（本來可以造成 ${o.raw} 傷害），明天再來！`
+    : o.late ? "Boss 已經被別人打倒了，這次沒有傷害，小魚乾照拿。"
+    : `打對 ${o.correct} 個字 × 正確率加成 ${o.bonus}${o.dmg < o.raw ? `（最後一擊只需要 ${o.dmg}）` : ""}`;
+  $("#res").innerHTML = `<div class="res questres">
+    <h2>${o.error ? "這次沒有送出" : o.killed ? `🎉 最後一擊！打倒${esc(lv.name)}！` : o.dmg ? `對${esc(lv.name)}造成 ${o.dmg} 傷害！` : `${esc(lv.name)}沒有受傷…`}</h2>
+    <p>${esc(why)}</p>
+    <div class="big"><div><small>速度（WPM）</small><strong>${Math.round(o.speed ?? sum.speed)}</strong></div>
+      <div class="s"><small>正確率</small><strong>${Math.round((o.acc ?? sum.acc) * 100)}%</strong></div>
+      <div class="s"><small>今天的次數</small><strong>${o.error ? "—" : `${o.today} / ${o.cap}`}</strong></div></div>
+    ${o.error ? `<p class="nickrule">${esc(o.error)}</p>` : ""}
+    ${o.fish ? `<p class="gain">🐟 +${o.fish} 小魚乾（現在 ${ST.fish} 條）</p>` : ""}
+    ${o.killed ? `<p class="gain">大家合力打倒了世界 Boss！每個有造成傷害的人都拿到獎勵，回世界 Boss 頁面收下。</p>` : ""}
+    <p class="hint">這段來自：${esc(lv.from)}${o.state ? `・Boss 還剩 ${o.state.left} 血` : ""}</p>
+    ${canMakeVideo() && !o.flagged && !o.error ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛的攻擊過程做成幾秒的直式影片。</span></div>` : ""}
+    <div class="btns">${o.state && !o.state.defeated ? '<button class="main" id="bAgain" type="button">再出擊</button>' : ""}<button id="bMap" type="button"${o.state && !o.state.defeated ? "" : ' class="main"'}>回世界 Boss</button></div></div>`;
+  if ($("#bVid")) $("#bVid").onclick = () => videoPanel($("#vid"), { scene: "battle", lang: lv.lang, texts: lv.texts, boss: lv.boss, big: true, rule, events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: 0, unit: "WPM", title: `🌍 世界 Boss ${lv.name}` }, {
+    link: { kind: "boss", piece: lv.world.piece, rule, events }, toast, file: "meow-type-world-boss",
+    shareText: `我在喵打跟大家一起打世界 Boss「${lv.name}」！ https://meow-type.otlab.org/quest`,
+  });
+  $("#bAgain")?.addEventListener("click", playBoss);
+  $("#bMap").onclick = () => { R = null; cancelAnimationFrame(raf); island = "boss"; renderMap(); };
+  $("#res").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
 function show(id) { for (const s of ["map", "play", "closet", "den"]) $("#" + s).hidden = s !== id; }
 
 /* ---------- 戰鬥 ---------- */
@@ -153,13 +274,15 @@ function play(lv, seg = segDone(lv)) {
     queueMicrotask(finish);
   });
   R.ty.setText(texts[0]);
-  $("#lvName").textContent = (lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`) + (nSeg > 1 ? `（第 ${seg + 1}/${nSeg} 段）` : "");
+  $("#lvName").textContent = lv.world ? `🌍 世界 Boss　${lv.name}` : (lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`) + (nSeg > 1 ? `（第 ${seg + 1}/${nSeg} 段）` : "");
   $("#restart0").hidden = seg === 0;
   const code = lv.lang === "cpp" || lv.lang === "py", cjk = code && lv.texts.some((t) => /[\u3000-\u9fff\uff00-\uffef]/.test(t));
   $("#hint").textContent = (code ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來這一關・不能貼上" + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
-  $("#lg").textContent = `${lv.target}`;
+  $("#lg").textContent = lv.world ? "×1" : `${lv.target}`;
+  $("#lg").previousElementSibling.textContent = lv.world ? "傷害加成" : "三星目標";
   battle.reset({ boss: lv.boss, hp: lv.chars, outfit: ST.outfit, big: lv.big });
   battle.left = battle.shown = lv.chars - lv.segs.slice(0, seg).flat().reduce((a, t) => a + t.length, 0); // 前面幾段已經打掉的血
+  if (lv.world) { battle.hp = Math.max(1, lv.world.hp); battle.left = battle.shown = lv.world.left; } // 世界 Boss：畫面上的血條是全部人共用的血
   $("#res").hidden = true; $("#box").classList.remove("end");
   TB.build(); TB.paint(); live();
   frame();
@@ -201,6 +324,7 @@ function live() {
   $("#ls").textContent = R.start ? Math.round(s.speed) : 0;
   $("#la").textContent = s.keys ? Math.round(s.acc * 100) + "%" : "100%";
   $("#lt").textContent = (ms / 1000).toFixed(1);
+  if (R.lv.world) $("#lg").textContent = "×" + accBonus(s.keys ? s.acc : 1);
 }
 
 async function finish() {
@@ -210,6 +334,7 @@ async function finish() {
   if (R.pend) battle.damage(now(), 0, R.pend, false);
   live(); TB.paint();
   let sum = summarize(R.ty, lv.lang, Math.max(1, R.endT));
+  if (lv.world) return bossFinish(lv, sum);
   const seg = R.seg, nSeg = lv.segs.length, last = seg === nSeg - 1;
   const prior = !ST.login ? (localSegs()[lv.id]?.parts || []).slice(0, seg) : [];
   const local = last ? starsOf(lv, nSeg > 1 && !ST.login ? mergeSums(lv.lang, [...prior, sum]) : sum) : 0;
@@ -308,7 +433,7 @@ $("#restart0").onclick = () => { if (R) play(R.lv, 0); };
 $("#back").onclick = () => { R = null; cancelAnimationFrame(raf); renderMap(); };
 
 /* ---------- 換裝與圖鑑 ---------- */
-function bossOf(levelId) { const lv = LEVELS.get(levelId); return lv ? `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.boss.name}` : ""; }
+function bossOf(levelId) { if (String(levelId).startsWith("boss:")) return `世界 Boss「${BOSS.get(levelId.slice(5))?.name || ""}」`; const lv = LEVELS.get(levelId); return lv ? `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.boss.name}` : ""; }
 function renderCloset() {
   show("closet");
   const own = new Set([...ST.owned, ...ITEMS.filter((x) => x.price === 0).map((x) => x.id)]);
@@ -361,6 +486,7 @@ addEventListener("resize", () => { if (R && !$("#play").hidden) TB.paint(); });
   await loadState();
   renderMap();
   askLogin("（沒登入只能玩第 1 章）");
+  if (ST.login && island !== "boss") api("/api/boss").then((r) => { if (r.rewards?.length) toast("🌍 世界 Boss 被打倒了！到「世界 Boss」收下獎勵"); });
   window.__mtReady = true;
 })();
 onLogin(async () => { await loadState(); if (!$("#map").hidden) renderMap(); else if (!$("#closet").hidden) renderCloset(); else if (!$("#den").hidden) den(); if (ME.user) toast("登入了！進度和小魚乾會存在你的帳號"); });

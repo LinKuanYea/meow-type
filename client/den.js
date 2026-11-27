@@ -81,18 +81,19 @@ function renderHint() {
 /* ---------- 家具清單（也是不用滑鼠的操作方式） ---------- */
 function renderList() {
   const group = (title, list) => `<h4>${title}</h4><div class="denitems">${list.map(card).join("")}</div>`;
-  $("#denList").innerHTML = group("學習家具（跟著進度解鎖，不能買）", DEN.filter((x) => x.learn)) + group("小魚乾家具", DEN.filter((x) => !x.learn));
+  $("#denList").innerHTML = group("學習家具（跟著進度解鎖，不能買）", DEN.filter((x) => x.learn)) + group("小魚乾家具", DEN.filter((x) => !x.learn && !x.from)) + group("🌍 世界 Boss 限定（打倒那一週的世界 Boss 才拿得到）", DEN.filter((x) => x.from));
   document.querySelectorAll("#denList canvas[data-id]").forEach((cv) => preview(cv, DEN_ITEM.get(cv.dataset.id)));
 }
 function card(it) {
   const ok = available(it), on = placed(it.id);
   let st, act = "";
   if (it.learn) st = ok ? "已解鎖" : `🔒 ${esc(it.how)}`;
+  else if (it.from) st = ok ? "已擁有" : "🔒 世界 Boss 限定";
   else st = ok ? "已擁有" : `🐟 ${it.price}`;
   if (D.login) {
     if (ok) act = (on ? `<button type="button" data-off="${it.id}">收起來</button>` : `<button type="button" class="main" data-put="${it.id}">擺進房間</button>`)
       + (it.learn ? `<button type="button" data-look="${it.id}">打開看看</button>` : "");
-    else if (!it.learn) act = `<button type="button" data-buy="${it.id}"${D.fish < it.price ? " disabled" : ""}>🐟 ${it.price} 買</button>`;
+    else if (!it.learn && !it.from) act = `<button type="button" data-buy="${it.id}"${D.fish < it.price ? " disabled" : ""}>🐟 ${it.price} 買</button>`;
   }
   return `<div class="denitem${ok ? "" : " no"}${on ? " on" : ""}"><canvas width="144" height="144" data-id="${it.id}" aria-hidden="true"></canvas>
     <b>${esc(it.name)}</b><small>${on ? "擺在房間裡" : st}</small>${it.learn ? "" : `<small class="how">${esc(it.how)}</small>`}<div class="denact">${act}</div></div>`;
@@ -101,7 +102,7 @@ function preview(cv, it) {
   const c = cv.getContext("2d"), s = sprite(it), w = it.w * PX, h = artH(it) * PX;
   const k = Math.min(cv.width / w, cv.height / h) * 0.9;
   c.imageSmoothingEnabled = false; c.clearRect(0, 0, cv.width, cv.height);
-  if (!available(it) && it.learn) c.globalAlpha = 0.35;
+  if (!available(it) && (it.learn || it.from)) c.globalAlpha = 0.35;
   c.drawImage(s, (cv.width - w * k) / 2, (cv.height - h * k) / 2, w * k, h * k);
   c.globalAlpha = 1;
 }

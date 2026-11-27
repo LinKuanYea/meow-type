@@ -3,7 +3,7 @@
 // 家具的圖：每格 8 × 8 個像素（PX），所以每一列的字元數是 w × 8；"." 是透明，其他字母查 pal 的顏色。
 // 地板家具的圖可以比佔的格子高（例如貓跳台佔 2 × 1 格、圖有 2 × 4 格高）：圖的下緣對齊佔的格子，多出來的往上畫（像站在牆前面）。
 // walk ＝ 貓可以從上面走過去（地毯、坐墊）；其他地板家具會擋路，貓要繞過去。
-// 取得方式：learn ＝ 跟學習進度連動（免費、不能買，由伺服器依進度解鎖）；price ＝ 用小魚乾買（和裝扮同一份小魚乾）。
+// 取得方式：from ＝ 世界 Boss 限定（打倒才拿得到、不能買）；learn ＝ 跟學習進度連動（免費、不能買，由伺服器依進度解鎖）；price ＝ 用小魚乾買（和裝扮同一份小魚乾）。
 
 export const ROOM = { w: 12, h: 8, wall: 3 };
 export const PX = 8;
@@ -278,6 +278,36 @@ export const DEN = [
       ".kkkkkkkkkkkkkk.",
       "kbbbbbbbbbbbbbbk",
       "kkkkkkkkkkkkkkkk",
+    ],
+  },
+
+  /* ---------- 世界 Boss 限定（打倒那一週的世界 Boss 才拿得到，不能買；from ＝ "boss:" + Boss 的 id，見 shared/boss.js） ---------- */
+  {
+    id: "den-yarn", name: "無限毛線球", w: 1, h: 1, zone: "floor", from: "boss:loop-cat", how: "世界 Boss「無限迴圈胖橘」的限定家具：怎麼滾都滾不完的毛線球",
+    pal: { k: "#a0461e", o: "#f08a24", y: "#ffd08a", t: "#f08a24" },
+    art: [
+      "........",
+      "..kkkk..",
+      ".kooyok.",
+      "kooyoook",
+      "koyooyok",
+      "kyooyook",
+      ".kooook.",
+      "..kkkk.t",
+    ],
+  },
+  {
+    id: "den-blocks", name: "字母積木", w: 1, h: 1, zone: "floor", from: "boss:grammeow", how: "世界 Boss「文法魔喵」的限定家具：疊起來的英文字母積木",
+    pal: { k: "#3b2418", r: "#e05a5a", b: "#4a8bd6", g: "#5fae4c", w: "#fff8ec" },
+    art: [
+      "........",
+      "........",
+      "..kkkk..",
+      "..krwk..",
+      "..kkkk..",
+      "kkkkkkkk",
+      "kbwkkgwk",
+      "kkkkkkkk",
     ],
   },
 ];
