@@ -2,7 +2,7 @@
 import { CAT_NAME, LEN_NAME } from "/shared/bank.js";
 import { unitOf } from "/shared/judge.js";
 import { esc } from "/shared/analyze.js";
-import { drawCat, PAL } from "/cat.js";
+import { drawCat, drawDressed, PAL } from "/cat.js";
 
 export const setText = (d) => `${CAT_NAME[d.c]}・${LEN_NAME[d.l]}・${d.m === "t60" ? "1 分鐘" : "打完一題"}`;
 const dateText = (ts) => { const t = new Date(ts); return `${t.getFullYear()}/${t.getMonth() + 1}/${t.getDate()}`; };
@@ -15,7 +15,7 @@ async function fontsReady() {
 
 /**
  * 畫成績圖片（1200×630，LINE、IG 限動、Messenger 預覽都好看）
- * d = { name, c, l, m, rule, speed, acc, ms, correct, ts, url, beat? }
+ * d = { name, c, l, m, rule, speed, acc, ms, correct, ts, url, beat?, outfit? }（outfit：登入的人的裝扮，沒有就畫原本的橘貓）
  */
 export async function drawResultImage(d) {
   await fontsReady();
@@ -30,7 +30,7 @@ export async function drawResultImage(d) {
   g.fillStyle = "rgba(255,255,255,.55)"; for (let x = 0; x < W; x += 56) g.fillRect(x, 520, 30, 6);
   // 終點旗
   for (let y = 300; y < 560; y += 20) for (let x = 0; x < 2; x++) { g.fillStyle = ((y / 20 + x) % 2) ? "#222" : "#fff"; g.fillRect(1110 + x * 20, y, 20, 20); }
-  drawCat(g, 70, 330, 14, 1, PAL.me);
+  if (d.outfit) drawDressed(g, 70, 330 - 28, 14, 1, d.outfit); // 換裝的貓上面多 2 列（帽子） else drawCat(g, 70, 330, 14, 1, PAL.me);
   // 標題列
   g.fillStyle = "#d9741a"; g.font = `400 64px ${PIX}`; g.textBaseline = "alphabetic"; g.fillText("喵打", 60, 98);
   g.fillStyle = "#2a1d14"; g.font = `700 34px ${SANS}`;

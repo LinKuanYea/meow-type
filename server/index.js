@@ -11,7 +11,8 @@ import { replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
 import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink, RULE } from "./quest.js";
 import { initDen, denState, denBuy, denSave } from "./den.js";
-import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
+import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange, oauthConfig } from "./auth.js";
+import { shareImage } from "./ogimage.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId, dropOtherRuleScores } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -94,6 +95,8 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === "/stats" || url.pathname === "/stats/export.json") { res.writeHead(302, { Location: url.pathname === "/stats" ? "/admin" : "/admin/export.json" }); res.end(); return; } // 舊網址
     if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
     if (url.pathname === "/version") return json(res, 200, { version: APP_VERSION, label: VERSION_LABEL });
+    const imgId = /^\/c\/([0-9A-Za-z]{8})\.png$/.exec(url.pathname)?.[1];
+    if (imgId) return sendShareImage(res, imgId);
     let p = decodeURIComponent(url.pathname);
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
@@ -111,7 +114,7 @@ export const server = http.createServer(async (req, res) => {
     if (base === CLIENT_DIR && /^text\/(html|javascript)/.test(type)) {
       data = data.toString("utf8").replaceAll("__APP_VERSION_LABEL__", VERSION_LABEL).replaceAll("__APP_VERSION__", APP_VERSION);
     }
-    if (type.startsWith("text/html")) data = String(data).replace("<!--OG-->", ogTags(shareId));
+    if (type.startsWith("text/html")) data = String(data).replace("<!--OG-->", ogTags(shareId, req));
     // JS 的 import 網址都加上版本號：瀏覽器或 Cloudflare 快取了舊的檔案也不會混到新版（v0.2.1 出過「舊 bank.js＋新 app.js」）
     if (type.startsWith("text/javascript")) data = versionImports(data.toString("utf8"));
     res.writeHead(200, { "Content-Type": type, ...SEC_HEADERS, ...(type.startsWith("text/html") ? { "Cache-Control": "no-store" } : {}) });
@@ -123,13 +126,35 @@ export const server = http.createServer(async (req, res) => {
 });
 
 /** 分享連結的預覽文字（LINE、Messenger 等貼上連結時顯示） */
-function ogTags(shareId) {
+/** 預覽圖：同一個分享＋同一套裝扮畫過就用快取（最多 200 張） */
+const imgCache = new Map();
+function sendShareImage(res, id) {
+  const sh = getShare(id, false);
+  if (!sh) { res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" }); res.end("找不到這個分享"); return; }
+  const key = id + JSON.stringify(sh.outfit);
+  let png = imgCache.get(key);
+  if (!png) {
+    png = shareImage(sh, unitOf(sh.c));
+    imgCache.set(key, png);
+    if (imgCache.size > 200) imgCache.delete(imgCache.keys().next().value);
+  }
+  res.writeHead(200, { "Content-Type": "image/png", "Content-Length": png.length, "Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff" });
+  res.end(png);
+}
+function siteUrl(req) {
+  const u = oauthConfig().url;
+  if (u) return u;
+  const host = String(req.headers.host || "").replace(/[^0-9A-Za-z.:-]/g, "");
+  return (req.headers["x-forwarded-proto"] === "https" || req.headers["cf-visitor"] ? "https://" : "http://") + host;
+}
+function ogTags(shareId, req) {
   const sh = shareId && getShare(shareId, false);
   const title = sh ? `${sh.name} 向你挑戰喵打！` : "喵打：貓咪打字練習";
   const desc = sh ? `${CAT_NAME[sh.c]}・${LEN_NAME[sh.l]}・${sh.m === "t60" ? "1 分鐘" : "打完一題"}：${Math.round(sh.speed)} ${unitOf(sh.c)}，正確率 ${Math.round(sh.acc * 100)}%。你打得贏嗎？`
     : "程式、英文、中文打字練習，打完告訴你哪裡可以更好。";
   const e = (x) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  return `<meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}"><meta property="og:type" content="website">`;
+  const img = sh ? `<meta property="og:image" content="${e(siteUrl(req) + "/c/" + sh.id + ".png")}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image">` : "";
+  return `<meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}"><meta property="og:type" content="website">${img}`;
 }
 
 export function versionImports(js) {

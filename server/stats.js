@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { BANK, CATS, LENS, CAT_NAME, LEN_NAME } from "../shared/bank.js";
+import { cleanOutfit } from "../shared/items.js";
 
 let db = null;
 const ID = /^[0-9a-f]{24}$/;
@@ -101,7 +102,15 @@ export function getShare(id, count) {
   const r = db.prepare("SELECT * FROM shares WHERE id=? AND (user_id IS NULL OR user_id NOT IN (SELECT id FROM users WHERE banned=1))").get(id);
   if (!r) return null;
   if (count) db.prepare("UPDATE shares SET views=views+1 WHERE id=?").run(id);
-  return { id: r.id, ts: r.ts, name: r.name_hidden ? HIDDEN_NAME : r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
+  return { outfit: r.user_id != null ? userOutfit(r.user_id) : null, id: r.id, ts: r.ts, name: r.name_hidden ? HIDDEN_NAME : r.name, login: r.user_id != null, c: r.cat, l: r.len, m: r.mode, rule: r.rule, specs: JSON.parse(r.specs), speed: r.speed, acc: r.acc, correct: r.correct, ms: r.ms };
+}
+/** 登入的人目前的裝扮（分享圖片上的貓穿這套）；只留下真的擁有的 */
+function userOutfit(uid) {
+  try {
+    const u = db.prepare("SELECT outfit FROM users WHERE id=?").get(uid);
+    const own = new Set(db.prepare("SELECT item FROM items WHERE user_id=?").all(uid).map((r) => r.item));
+    return cleanOutfit(JSON.parse(u?.outfit || "{}"), own);
+  } catch { return null; } // items 表還沒建立（冒險模式沒啟用）時
 }
 export function shareEvent(id, kind) {
   const col = { accept: "accepts", win: "wins", lose: "loses" }[kind];

@@ -9,6 +9,7 @@ import { renderStatsBody, exportAll, getSetting, setSetting, dbh, FLAG, RULE, HI
 import { CAT_NAME, LEN_NAME } from "../shared/bank.js";
 import { newsIndex, setNewsHidden, getNews } from "./quest.js";
 import { twDate } from "../shared/news.js";
+import { ISLANDS } from "../shared/quest.js";
 import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
@@ -82,7 +83,7 @@ code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-br
 </style></head><body>${body}</body></html>`);
 }
 function shell(res, cur, inner, msg, me) {
-  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/quest", "冒險模式"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <!--email_off--><main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main><!--/email_off-->`);
@@ -224,6 +225,7 @@ export async function handleAdmin(req, res, url) {
   if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg, me); return true; }
   if (p === "/admin/scores") { shell(res, "/admin/scores", scoresPage(url), msg, me); return true; }
   if (p === "/admin/news") { shell(res, "/admin/news", newsPage(), msg, me); return true; }
+  if (p === "/admin/quest") { shell(res, "/admin/quest", questPage(url), msg, me); return true; }
   if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
   if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
   if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg, me); return true; }
@@ -279,6 +281,37 @@ ${f ? "" : `<h2>分享連結</h2>
 <div class="wrap"><table><thead><tr><th>連結</th><th>時間</th><th>暱稱</th><th>題目</th><th>速度</th><th>被打開</th><th>接受挑戰</th><th></th></tr></thead><tbody>
 ${shares.map((r) => `<tr><td><a href="/c/${esc(r.id)}" target="_blank" rel="noopener">${esc(r.id)}</a></td><td>${tw(r.ts)}</td><td>${nameCell(r)}</td><td>${what(r)}</td><td>${speed(r)}</td><td>${r.views}</td><td>${r.accepts}</td><td>${hideBtn("share", r)}</td></tr>`).join("")
   || '<tr><td colspan="8">還沒有分享。</td></tr>'}</tbody></table></div><p class="n">最多列最近 100 筆。</p>`}`;
+}
+
+// 冒險模式統計：各關玩過、過關、三星的人數，過關率，卡關人數（打過但還沒過關的人）。只算登入的人（沒登入的成績存在瀏覽器）。
+function questPage(url) {
+  const db = dbh(), days = Math.max(0, Math.min(365, parseInt(url.searchParams.get("d") || "0", 10) || 0)); // 0＝全部
+  const since = days ? Date.now() - days * 86400000 : 0;
+  const runs = Object.fromEntries(db.prepare(`SELECT level, COUNT(*) n, COUNT(DISTINCT user_id) u, SUM(stars>0) ok, AVG(CASE WHEN stars>0 THEN speed END) sp, AVG(acc) acc
+    FROM adv_runs WHERE flag='' AND ts>=? AND level NOT LIKE 'news-%' GROUP BY level`).all(since).map((r) => [r.level, r]));
+  const best = Object.fromEntries(db.prepare(`SELECT level, SUM(stars>0) ok, SUM(stars=3) s3 FROM adv WHERE last_ts>=? GROUP BY level`).all(since).map((r) => [r.level, r]));
+  const stuck = Object.fromEntries(db.prepare(`SELECT r.level, COUNT(DISTINCT r.user_id) n FROM adv_runs r WHERE r.flag='' AND r.ts>=? AND r.level NOT LIKE 'news-%'
+    AND NOT EXISTS (SELECT 1 FROM adv a WHERE a.user_id=r.user_id AND a.level=r.level AND a.stars>0) GROUP BY r.level`).all(since).map((r) => [r.level, r.n]));
+  const segs = Object.fromEntries(db.prepare(`SELECT level, COUNT(DISTINCT user_id) n FROM adv_seg WHERE ts>=? GROUP BY level`).all(Date.now() - 14 * 86400000).map((r) => [r.level, r.n]));
+  const tot = db.prepare(`SELECT COUNT(DISTINCT user_id) u, COUNT(*) n, COALESCE(SUM(fish),0) f FROM adv_runs WHERE flag='' AND ts>=?`).get(since);
+  const fishNow = db.prepare("SELECT COALESCE(SUM(fish),0) f FROM users").get().f;
+  const bought = db.prepare("SELECT COUNT(*) n FROM items WHERE how='buy' AND ts>=?").get(since).n;
+  const flagged = db.prepare("SELECT COUNT(*) n FROM adv_runs WHERE flag<>'' AND ts>=?").get(since).n;
+  const rangeLinks = [[0, "全部"], [7, "最近 7 天"], [30, "最近 30 天"]].map(([d, t]) => `<a href="/admin/quest${d ? "?d=" + d : ""}" class="btnlink${d === days ? "" : " sec"}"${d === days ? ' aria-current="page"' : ""}>${t}</a>`).join(" ");
+  const row = (lv, ci) => {
+    const r = runs[lv.id] || {}, b = best[lv.id] || {}, st = stuck[lv.id] || 0;
+    const rate = r.n ? r.ok / r.n : null, hard = r.n >= 5 && rate < 0.5;
+    const s3 = b.ok ? b.s3 / b.ok : null;
+    return `<tr${hard ? ' class="bn"' : ""}><td>${ci}-${lv.index + 1}${lv.big ? " 👑" : ""}</td><td>${esc(lv.name)}</td><td>${r.u || 0}</td><td>${r.n || 0}</td><td>${rate == null ? "—" : pct(rate)}${hard ? ' <span class="no">偏難</span>' : ""}</td>
+      <td>${b.ok || 0}</td><td>${st ? `<span class="no">${st}</span>` : 0}</td><td>${segs[lv.id] || 0}</td><td>${r.sp ? Math.round(r.sp) : "—"} / ${lv.target}</td><td>${s3 == null ? "—" : pct(s3)}</td><td>${r.acc ? pct(r.acc) : "—"}</td></tr>`;
+  };
+  return `<h1>冒險模式</h1>
+<p>只算登入的學生（沒登入的成績存在瀏覽器，伺服器看不到）；可疑的成績不算。<b>過關率</b>＝拿到 1 顆星以上的次數 ÷ 出擊次數；<b>卡關</b>＝打過這關但還沒過關的人數；<b>分段中</b>＝長關卡打到一半、14 天內會接著打的人數。過關率低於 50%（出擊 5 次以上）標成「偏難」。<b>平均速度 / 三星</b>：過關那幾次的平均 WPM 和三星門檻，用來調門檻；<b>三星比例</b>＝過關的人裡拿到三星的比例。</p>
+<p class="row">${rangeLinks}</p>
+<div class="card"><p>玩過的人：<b>${tot.u}</b>　出擊次數：<b>${tot.n}</b>　可疑（不算）：${flagged}　發出的小魚乾：${tot.f}　大家現在手上的小魚乾：${fishNow}　買了幾件裝扮／家具：${bought}</p></div>
+${ISLANDS.filter((is) => is.open).map((is) => `<h2>${esc(is.name)}</h2>${is.chapters.map((ch, k) => `<h3>${esc(ch.name)}</h3>
+<div class="wrap"><table><thead><tr><th>關</th><th>名稱</th><th>人數</th><th>出擊</th><th>過關率</th><th>過關人數</th><th>卡關</th><th>分段中</th><th>平均速度 / 三星</th><th>三星比例</th><th>正確率</th></tr></thead>
+<tbody>${ch.levels.map((lv) => row(lv, k + 1)).join("")}</tbody></table></div>`).join("")}`).join("")}`;
 }
 
 function newsPage() {

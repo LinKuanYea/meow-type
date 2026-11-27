@@ -290,6 +290,10 @@ try {
   ok(got.name === "分享貓" && got.c === "cpp" && got.specs[0].i[0] === spec.i[0] && !("cid" in got) && Math.abs(got.speed - r0.sum.speed) < 0.01, "讀分享內容（不外流編號）");
   const page = await (await get("/c/" + sh.id)).text();
   ok(page.includes('og:title" content="分享貓 向你挑戰喵打！"') && page.includes("/app.js?v=abc1234"), "挑戰連結的網頁與預覽文字");
+  ok(page.includes(`/c/${sh.id}.png"`) && page.includes('og:image:width" content="1200"'), "挑戰連結有預覽圖");
+  const ogr = await get(`/c/${sh.id}.png`), ogb = Buffer.from(await ogr.arrayBuffer());
+  ok(ogr.headers.get("content-type") === "image/png" && ogb.subarray(1, 4).toString() === "PNG" && ogb.readUInt32BE(16) === 1200 && ogb.readUInt32BE(20) === 630 && ogb.length < 200000, "預覽圖是 1200×630 的 PNG（" + ogb.length + " bytes）");
+  eq([(await get("/c/AAAAAAAA.png")).status, (await get("/")).headers.get("content-type").includes("html") && !(await (await get("/")).text()).includes("og:image")], [404, true], "不存在的分享沒有預覽圖、首頁沒有 og:image");
   ok(!(await (await get("/")).text()).includes("<!--OG-->"), "首頁的 OG 標記有換掉");
   eq((await get("/api/share/zzzzzzzz")).status, 404, "不存在的分享");
   eq((await postJ(`/api/share/${sh.id}/accept`, {})).status, 204, "接受挑戰");
@@ -430,6 +434,9 @@ try {
   ok((await get(`/api/news/${NT}-3`)).status === 404 && (await get(`/api/news/${NT}-2`)).status === 200, "下架一篇不影響同一天的其他篇");
   ok(!(await (await fetch(base + "/api/news")).json()).list.some((n) => n.key === NT + "-3"), "列表也不顯示下架的那篇");
   ok((await post("/admin/news", `key=${NT}-3&action=show`, AC2)).headers.get("location").includes("m=newsshow"), "恢復那一篇");
+  const qp = await (await get("/admin/quest", AC2)).text();
+  ok(qp.includes("冒險模式") && qp.includes("宣告與輸入") && qp.includes("卡關") && qp.includes("Python"), "管理頁的冒險模式統計");
+  ok((await get("/admin/quest?d=7", AC2)).status === 200 && !(await (await get("/admin/quest")).text()).includes("卡關"), "冒險模式統計：最近 7 天、要登入管理頁");
   await fetch(base + "/admin/logout", { method: "POST", headers: { ...O, ...AC2 }, redirect: "manual" });
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;

@@ -219,7 +219,7 @@ function finish(ms) {
   bindShare($("#res"), {
     toast,
     create: (name) => { store.set("mt-nick", name); if (ME.user && !ME.user.nick) { ME.user.nick = name; syncNickFields(); } return post("/api/share", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice(), ms: Math.round(ms), speed: sp }); },
-    imageData: { c: S.cat, l: S.len, m: S.mode, rule: S.rule, speed: sp, acc: A.acc, ms, correct: A.correct, ts: Date.now(), beat: won && !R.rival.me ? R.rival.name : null },
+    imageData: { outfit: OUTFIT, c: S.cat, l: S.len, m: S.mode, rule: S.rule, speed: sp, acc: A.acc, ms, correct: A.correct, ts: Date.now(), beat: won && !R.rival.me ? R.rival.name : null },
   });
   if (L) {
     const it0 = R.specs[0];
