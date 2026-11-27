@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
+import { initAdventure, advState, advClear, advBuy, advWear } from "./adventure.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
@@ -27,6 +28,7 @@ const APP_BUILT = String(process.env.APP_BUILT || "").replace(/[^0-9/: -]/g, "")
 const VERSION_LABEL = `v${PKG_VERSION}（${APP_VERSION}${APP_BUILT ? `・${APP_BUILT}` : ""}）`;
 console.log(`喵打 ${VERSION_LABEL}`);
 initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
+initAdventure();
 
 /* ---------- Node 版本檢查（2026-10-21 資安更新） ---------- */
 const PATCHED = { 22: [22, 23, 4], 24: [24, 22, 1], 26: [26, 12, 1] };
@@ -61,6 +63,7 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
+    if (url.pathname === "/api/adv") return json(res, 200, advState(currentUser(req)));
     if (url.pathname === "/api/me") {
       const u = currentUser(req);
       return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "", nickNext: nickNextChange(u), banned: !!u.banned } : null });
@@ -82,6 +85,7 @@ export const server = http.createServer(async (req, res) => {
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
     if (p === "/me") p = "/me.html";
+    if (p === "/adv") p = "/adv.html";
     if (p === "/privacy" || p === "/terms") p += ".html";
     let base = CLIENT_DIR, rel = p;
     if (p.startsWith("/shared/")) { base = SHARED_DIR; rel = p.slice("/shared".length); }
@@ -133,7 +137,7 @@ function readJson(req, limit) {
   });
 }
 async function handleApi(req, res, pathname) {
-  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" ? 512 * 1024 : 4096);
+  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" || pathname === "/api/adv/clear" ? 512 * 1024 : 4096);
   if (body === "too-big") { res.writeHead(413, { Connection: "close" }); res.end(); res.on("finish", () => req.socket.destroy()); return; }
   if (!body || typeof body !== "object") return json(res, 400, { error: "格式不對" });
   const user = currentUser(req);
@@ -153,6 +157,8 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/run") { recordRun(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body, user);
+    const adv = { "/api/adv/clear": advClear, "/api/adv/buy": advBuy, "/api/adv/wear": advWear }[pathname];
+    if (adv) { const r = adv(user, body); return r.error ? json(res, r.status || 400, { error: r.error }) : json(res, 200, r); }
     if (pathname === "/api/share") return handleShareCreate(res, body, user);
     const ev = /^\/api\/share\/([0-9A-Za-z]{8})\/(accept|win|lose)$/.exec(pathname);
     if (ev) { shareEvent(ev[1], ev[2]); return json(res, 204); }

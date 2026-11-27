@@ -1,4 +1,5 @@
 // 像素貓（16×12 格）：跑道上的貓與分享圖片共用
+import { ITEM, DEFAULT_OUTFIT } from "/shared/items.js";
 export const BODY = ["..........k...k.", ".........kok.kok", ".........koooook", "k........kooeoek", "ko.......kooopok", ".ko.kkkkkkoooook", "..kkoooooooooook", "..kowwoooooowwk.", "..koooooooooook.", "...kkkkkkkkkkk.."];
 export const LEGS = [["...ko.ko..ko.ko.", "...kk.kk..kk.kk."], ["....koko..koko..", "....kkkk..kkkk.."]];
 export const PAL = {
@@ -14,4 +15,18 @@ export function catSVG(f, ghost) {
 /** 在 canvas 上畫貓：左上角 (x, y)，每格 s 像素 */
 export function drawCat(ctx, x, y, s, f = 0, pal = PAL.me) {
   BODY.concat(LEGS[f]).forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") { ctx.fillStyle = pal[c]; ctx.fillRect(x + i * s, y + j * s, s + 0.5, s + 0.5); } }));
+}
+
+/* ---------- 換裝後的貓（冒險模式、換裝頁）：16 × 14 格，最上面 2 列留給帽子 ---------- */
+const LAYER_ORDER = ["back", "neck", "face", "hat"];
+/** 在 canvas 上畫穿好衣服的貓：左上角 (x, y)，每格 s 像素；flip＝面向左 */
+export function drawDressed(ctx, x, y, s, f = 0, outfit = DEFAULT_OUTFIT, opt = {}) {
+  const fur = (ITEM.get(outfit.fur) || ITEM.get("fur-orange")).fur;
+  const px = (i, j, c) => { ctx.fillStyle = c; ctx.fillRect(x + (opt.flip ? 15 - i : i) * s, y + j * s, s + 0.5, s + 0.5); };
+  BODY.concat(LEGS[f]).forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") px(i, j + 2, opt.tint || fur[c]); }));
+  for (const slot of LAYER_ORDER) {
+    const it = ITEM.get(outfit[slot]);
+    if (!it?.art) continue;
+    it.art.forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") px(i, it.y + j, opt.tint || it.pal[c]); }));
+  }
 }

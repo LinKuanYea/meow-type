@@ -3,6 +3,7 @@ import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/share
 import { learnCard } from "/learn.js";
 import { ME, loadMe, onLogin, loginHint, nickField, bannedNote } from "/account.js";
 import { catSVG } from "/cat.js";
+import { TypeBox } from "/typebox.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
 import { analyze, tips, drillText, baseKey, show, esc, classify } from "/shared/analyze.js";
@@ -34,7 +35,7 @@ const S = Object.assign({ cat: "cpp", len: "para", mode: "full", rule: "back", u
 const isCode = () => S.cat === "cpp" || S.cat === "py";
 const timed = () => S.mode === "t60" && !R.drill;
 const txt = $("#txt"), ta = $("#ta"), box = $("#box"), comp = $("#comp");
-let R = null, spans = [], composing = false, lastComp = { t: 0, d: "" }, raf = 0, lastSpec = null;
+let R = null, raf = 0, lastSpec = null;
 
 /* ---------- 像素貓 ---------- */
 const SV = [[catSVG(0, 0), catSVG(1, 0)], [catSVG(0, 1), catSVG(1, 1)]];
@@ -81,39 +82,13 @@ function newRun(text, drill, spec) {
   $("#hint").textContent = (isCode() ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來同一題・不能貼上" + (S.cat === "zh" ? "・用注音或其他中文輸入法打" : "") + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
   ta.value = ""; ta.focus({ preventScroll: true });
 }
-function build() {
-  txt.className = S.cat === "zh" ? "zh" : "";
-  const t = R.ty.text; let h = "", ls = true;
-  for (let i = 0; i < t.length; i++) {
-    const c = t[i];
-    if (c === "\n") { h += `<span class="nl">↵</span><br>`; ls = true; continue; }
-    if (c === " " && ls && isCode()) { h += `<span class="ind">·</span>`; continue; }
-    ls = false; h += `<span>${esc(c)}</span>`;
-  }
-  txt.innerHTML = h; spans = [...txt.querySelectorAll("span")]; txt.scrollTop = 0;
-}
-function paint() {
-  const ty = R.ty, fb = S.rule === "back" ? ty.firstBad() : -1, n = ty.typed.length;
-  spans.forEach((s, i) => {
-    const t = ty.typed[i], base = s.classList.contains("ind") ? "ind" : s.classList.contains("nl") ? "nl" : "";
-    let c = base;
-    if (t === undefined) { if (i === n) c += " cur"; delete s.dataset.got; }
-    else {
-      const ok = t === ty.text[i] && (fb < 0 || i < fb);
-      c += ok ? " ok" : " bad";
-      if (!ok && t !== ty.text[i]) s.dataset.got = show(t); else delete s.dataset.got;
-    }
-    s.className = c.trim();
-  });
-  const cur = spans[Math.min(n, spans.length - 1)];
-  if (cur) {
-    const b = box.getBoundingClientRect(), r = cur.getBoundingClientRect();
-    const x = (n >= spans.length ? r.right : r.left) - b.left, y = r.top - b.top;
-    ta.style.left = x + "px"; ta.style.top = y + "px"; comp.style.left = x + "px"; comp.style.top = y - 4 + "px";
-    const tr = txt.getBoundingClientRect();
-    if (r.bottom > tr.bottom - 10 || r.top < tr.top) cur.scrollIntoView({ block: "center" });
-  }
-}
+const TB = TypeBox({ box, txt, ta, comp }, {
+  ty: () => R && R.ty, active: () => !!R && !R.ended, started: () => !!R && !!R.start,
+  isCode, cat: () => S.cat, rule: () => S.rule, event, pasted,
+  escape: () => newRun(R.text0, R.drill, R.spec0),
+  ime: () => { if (!R.ime) toast("輸入法在中文模式，請切到英數"); R.ime++; },
+});
+const build = () => TB.build(), paint = () => TB.paint();
 function now() { return performance.now(); }
 function event(ev) {
   if (!R || R.ended) return;
@@ -330,49 +305,6 @@ $("#rivalOff").addEventListener("click", () => { rival = null; newRun(); });
 let tt;
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 1800); }
 function pasted() { if (R && !R.ended) R.pastes++; toast("這裡不能貼上，要自己打喔"); }
-ta.addEventListener("keydown", (e) => {
-  if (e.isComposing || e.keyCode === 229) return;
-  if (e.key === "Tab") { e.preventDefault(); if (isCode()) event([0, "t"]); }
-  else if (e.key === "Escape") { e.preventDefault(); newRun(R.text0, R.drill, R.spec0); }
-});
-ta.addEventListener("beforeinput", (e) => {
-  const t = e.inputType || "";
-  if (composing || e.isComposing || t.includes("Composition")) return;
-  e.preventDefault();
-  if (t === "insertText") {
-    const d = e.data || "";
-    if (Date.now() - lastComp.t < 80 && d === lastComp.d) return;
-    event([0, "i", d, 0]);
-  } else if (t === "insertLineBreak" || t === "insertParagraph") event([0, "i", "\n", 0]);
-  else if (t === "deleteContentBackward") event([0, "b"]);
-  else if (t.startsWith("delete") && t.endsWith("Backward")) event([0, "w"]);
-  else if (t.startsWith("insertFrom")) pasted();
-});
-ta.addEventListener("compositionstart", () => {
-  composing = true;
-  // 開始組字就開始計時（不然注音整句組好再按 Enter，時間幾乎是 0，速度會變成好幾百）
-  if (R && !R.ended && !R.start) event([0, "c"]);
-  // 程式題的字串裡可能有中文：下一個要打的字是中文就不提醒
-  const next = R && R.ty.text[R.ty.typed.length] || "";
-  const wantCJK = /[\u3000-\u9fff\uff00-\uffef]/.test(next);
-  if (S.cat !== "zh" && R && !R.ended && !wantCJK) { if (!R.ime) toast("輸入法在中文模式，請切到英數"); R.ime++; }
-});
-ta.addEventListener("compositionupdate", (e) => { comp.textContent = e.data || ""; });
-ta.addEventListener("compositionend", (e) => {
-  composing = false; comp.textContent = "";
-  const d = e.data || ""; lastComp = { t: Date.now(), d };
-  setTimeout(() => { ta.value = ""; }, 0);
-  if (d) event([0, "i", d, 1]);
-});
-ta.addEventListener("input", () => { if (!composing) ta.value = ""; });
-ta.addEventListener("paste", (e) => { e.preventDefault(); pasted(); });
-ta.addEventListener("drop", (e) => { e.preventDefault(); pasted(); });
-["copy", "cut", "contextmenu", "dragstart"].forEach((ev) => box.addEventListener(ev, (e) => e.preventDefault()));
-ta.addEventListener("focus", () => box.classList.add("on"));
-ta.addEventListener("blur", () => box.classList.remove("on"));
-box.addEventListener("mousedown", (e) => { e.preventDefault(); if (!R.ended) ta.focus({ preventScroll: true }); });
-box.addEventListener("touchend", () => { if (!R.ended) ta.focus({ preventScroll: true }); });
-
 /* ---------- 設定 ---------- */
 function syncSeg() { document.querySelectorAll(".opts .seg").forEach((g) => g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", S[g.dataset.k] === b.dataset.v))); }
 document.querySelectorAll(".opts .seg").forEach((g) => g.addEventListener("click", (e) => {

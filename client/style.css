@@ -208,3 +208,45 @@ table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{bor
 .ver a{color:var(--gin);font-size:13px}
 .nickrule{flex-basis:100%;margin:0;font-size:13px;color:var(--todo)}.nickrule a{color:var(--gin)}
 .msg.err{background:var(--badbg);color:var(--ink);padding:10px 14px;border-radius:10px;margin-bottom:12px}
+/* ---------- 冒險模式 ---------- */
+.advtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.advlink{background:var(--gin);color:#fff}
+.fish{font:400 22px/1 "DotGothic16",monospace;color:var(--gin);padding:0 6px}
+.fish[hidden]{display:none}
+.islands{margin:18px 0 6px;flex-wrap:wrap}
+.islands .soon{color:var(--todo)}
+.chap{margin:18px 0}
+.chap h3{margin:0 0 8px;font-size:19px}
+.lock{font-size:13px;margin-left:8px;border:2px solid var(--todo);color:var(--todo);border-radius:999px;padding:0 8px;vertical-align:middle}
+.lvls{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.lvl{width:100%;font:inherit;text-align:left;display:grid;gap:2px;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;min-height:92px}
+.lvl:hover:not(:disabled){border-color:var(--gin)}
+.lvl:disabled{cursor:not-allowed;opacity:.55}
+.lvl.big{border-color:color-mix(in srgb,var(--bad) 50%,var(--line))}
+.lvl.done{background:color-mix(in srgb,var(--grass) 10%,var(--card))}
+.lvn{font:400 14px "DotGothic16",monospace;color:var(--todo)}
+.lvt{font-weight:700;line-height:1.3}
+.lvs{color:#e8a000;font-size:18px;letter-spacing:2px}
+.lvd{font-size:12px;color:var(--bad)}
+.playhead{display:flex;align-items:center;gap:14px;margin:14px 0 8px}
+.playhead h2{margin:0;font-size:22px}
+.arena{width:100%;aspect-ratio:960/300;display:block;border-radius:14px;border:2px solid var(--line);image-rendering:pixelated;background:#cfeaf6}
+.advres .bigstars{font-size:46px;line-height:1;color:#e8a000;letter-spacing:6px;margin:4px 0}
+.gain{font-weight:700;color:var(--gin);font-size:18px}
+.drop{display:flex;align-items:center;gap:14px;border:2px dashed var(--gin);border-radius:12px;padding:8px 14px;margin:12px 0}
+.drop canvas{image-rendering:pixelated;width:120px;height:105px}
+.closet{display:grid;grid-template-columns:minmax(200px,260px) 1fr;gap:20px;align-items:start}
+.preview{position:sticky;top:12px;background:var(--sky);border:2px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+.preview canvas{image-rendering:pixelated;width:100%;max-width:224px;height:auto}
+#slots h3{margin:14px 0 8px}
+.items{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.item{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:8px;display:grid;gap:4px;justify-items:center;text-align:center}
+.item.worn{border-color:var(--gin)}
+.item.no b{color:var(--todo)}
+.item canvas{image-rendering:pixelated;width:96px;height:84px}
+.item small{color:var(--todo);font-size:12px;line-height:1.3}
+.item button{font:inherit;font-size:14px;font-weight:700;min-height:36px;padding:0 12px;border-radius:10px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer}
+.item button.main{background:var(--gin);color:#fff}
+.item button:disabled{opacity:.5;cursor:not-allowed}
+.item .on{font-size:13px;color:var(--gin);font-weight:700}
+@media (max-width:640px){.closet{grid-template-columns:1fr}.preview{position:static}}
