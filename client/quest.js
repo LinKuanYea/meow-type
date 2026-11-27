@@ -10,6 +10,7 @@ import { drawDressed } from "/cat.js";
 import { Battle } from "/battle.js";
 import { TypeBox } from "/typebox.js";
 import { learnCard } from "/learn.js";
+import { makeVideo, canMakeVideo } from "/video.js";
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -192,6 +193,7 @@ async function finish() {
   if (ST.login && !out.error) { ST.stars[lv.id] = Math.max(prev, out.stars); if (typeof out.total === "number") ST.fish = out.total; out.drops.forEach((d) => ST.owned.push(d)); $("#fish").textContent = `🐟 ${ST.fish}`; }
   if (!ST.login && out.stars > prev) { ST.stars[lv.id] = out.stars; store.set(LOCAL, ST.stars); }
   if (!R || R.lv !== lv || !R.ended) return; // 等結果的時候已經離開這一關（進度照樣記下）
+  out.events = R.ty.events.slice(); out.rule = R.rule;
   if (out.stars > 0) battle.win(now());
   renderResult(lv, sum, out, prev);
 }
@@ -218,10 +220,12 @@ function renderResult(lv, sum, out, prev) {
     ${ST.login ? (out.fish ? `<p class="gain">🐟 +${out.fish} 小魚乾（現在 ${ST.fish} 條）${out.streak ? `　🔥 連續 ${out.streak} 天` : ""}</p>` : s && s <= prev ? `<p class="hint">重打已經拿過的星星：每次 ${FISH.replay} 條小魚乾，每天最多 ${FISH.replayPerDay} 次。</p>` : "")
       : `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>就能拿小魚乾、換裝，進度也會存起來（第 2 章以後要登入）。</p>`}
     ${out.drops?.length ? `<div class="drop"><canvas id="dropCv" width="160" height="140"></canvas><p>獲得裝扮：<b>${esc(ITEM.get(out.drops[0]).name)}</b>！到「換裝」穿上它。</p></div>` : ""}
+    ${canMakeVideo() && !out.flagged && !out.error ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛的打怪過程做成幾秒的直式影片，可以分享到 IG 限時動態。</span></div>` : ""}
     ${L ? L.html : ""}
     <div class="btns">${canNext ? '<button class="main" id="bNext" type="button">下一關</button>' : ""}<button${canNext ? "" : ' class="main"'} id="bAgain" type="button">再打一次</button><button id="bMap" type="button">回地圖</button></div></div>`;
   if (out.drops?.length) { const c = $("#dropCv").getContext("2d"); c.imageSmoothingEnabled = false; drawDressed(c, 8, 0, 9, 0, { ...ST.outfit, [ITEM.get(out.drops[0]).slot]: out.drops[0] }); }
   if (L) L.bind($("#res"), { answered: 0, correct: 0, skipped: 0, opened: 0, onAnswer: (ok) => ok && toast("答對了！") });
+  if ($("#bVid")) $("#bVid").onclick = () => videoUI(lv, out);
   $("#bAgain").onclick = () => play(lv);
   $("#bMap").onclick = renderMap;
   if (lv.news) $("#bMap").textContent = "回新聞列表";
@@ -236,6 +240,28 @@ function bindNewsQuiz(root) {
     fs.querySelectorAll("input").forEach((x) => { x.disabled = true; });
     toast(k === a ? "答對了！" : "再看一次文章找找看");
   }));
+}
+/* ---------- 縮時影片 ---------- */
+async function videoUI(lv, out) {
+  const box = $("#vid");
+  box.innerHTML = `<p><b>影片製作中…</b> <span id="vidPct">0%</span></p><progress id="vidBar" max="1" value="0"></progress>`;
+  const title = lv.news ? `📰 ${fmtDate(lv.news.date)} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
+  let v;
+  try {
+    v = await makeVideo({ lv, rule: out.rule, events: out.events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: out.stars, unit: "WPM", title },
+      (p) => { const b = $("#vidBar"); if (b) { b.value = p; $("#vidPct").textContent = Math.round(p * 100) + "%"; } });
+  } catch (e) { box.innerHTML = `<p class="nickrule">做不出影片：${esc(e.message || String(e))}。換用電腦版 Chrome 試試看。</p>`; return; }
+  if (!document.body.contains(box)) return;
+  const url = URL.createObjectURL(v.blob), name = `meow-type-${lv.id}.${v.ext}`;
+  const file = new File([v.blob], name, { type: v.type });
+  const canShare = !!navigator.canShare?.({ files: [file] });
+  box.innerHTML = `<video src="${url}" controls playsinline muted loop autoplay></video>
+    <div class="vidbtns">${canShare ? '<button type="button" class="main" id="vShare">分享（選 Instagram → 限時動態）</button>' : ""}<a class="acctbtn" href="${url}" download="${name}">下載影片</a></div>
+    <p class="hint">${canShare ? "" : "電腦上沒有 IG 的話，下載後傳到手機再分享。"}${v.ext === "webm" ? "這個瀏覽器只能做 WebM 格式，IG 可能不收，建議用 Chrome 或 Safari。" : ""}</p>`;
+  $("#vShare")?.addEventListener("click", async () => {
+    try { await navigator.share({ files: [file], title: "喵打", text: "我在喵打打倒了" + lv.boss.name + "！你打得贏嗎？ https://meow-type.otlab.org/quest" }); }
+    catch (e) { if (e.name !== "AbortError") toast("分享不了，改用下載吧"); }
+  });
 }
 $("#back").onclick = () => { R = null; cancelAnimationFrame(raf); renderMap(); };
 

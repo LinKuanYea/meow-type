@@ -103,6 +103,18 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   }
   return { evs, t };
 }
+/* ---------- 縮時影片的 MP4 封裝 ---------- */
+{
+  const { muxMp4 } = await import("../client/mp4.js");
+  const blob = muxMp4({ chunks: [{ data: new Uint8Array([0, 0, 0, 2, 9, 16]), key: true }, { data: new Uint8Array([0, 0, 0, 1, 1]), key: false }], width: 1080, height: 1920, fps: 30, avcC: new Uint8Array([1, 100, 0, 40, 255, 225]) });
+  const u = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(u.buffer), td = new TextDecoder();
+  const boxes = []; for (let o = 0; o < u.length; o += dv.getUint32(o)) boxes.push(td.decode(u.subarray(o + 4, o + 8)));
+  eq(boxes, ["ftyp", "mdat", "moov"], "MP4：ftyp、mdat、moov");
+  const s = td.decode(u);
+  ok(["avc1", "avcC", "stts", "stss", "stsz", "stco"].every((x) => s.includes(x)) && blob.type === "video/mp4", "MP4：索引齊全");
+  const stco = s.indexOf("stco"), off = dv.getUint32(stco + 12);
+  eq([...u.subarray(off, off + 6)], [0, 0, 0, 2, 9, 16], "MP4：stco 指到第一格的資料");
+}
 /* ---------- 冒險模式 ---------- */
 {
   ok(LEVELS.size >= 10, "冒險模式有關卡");
@@ -382,6 +394,7 @@ try {
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;
   // 冒險模式
+  ok((await get("/video.js")).status === 200 && (await get("/mp4.js")).status === 200 && /media-src 'self' blob:/.test((await get("/quest")).headers.get("content-security-policy")), "縮時影片的程式與 CSP（blob 影片）");
   ok((await get("/quest")).status === 200 && (await fetch(base + "/adv", { redirect: "manual" })).headers.get("location") === "/quest" && (await get("/quest.js")).status === 200 && (await get("/battle.js")).status === 200 && (await get("/typebox.js")).status === 200 && (await get("/shared/items.js")).status === 200, "冒險模式的網頁");
   eq(await (await get("/api/quest")).json(), { login: false }, "沒登入：沒有冒險進度");
   const xAdvpost = (p, b, C = {}) => fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", ...C }, body: JSON.stringify(b) });

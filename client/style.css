@@ -271,3 +271,10 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 @media (max-width:720px){.today{grid-template-columns:1fr}}
 .cat svg.dressed{height:56px}
 .cat.dressed span{bottom:60px}
+/* 縮時影片 */
+.vid{margin:14px 0;padding:12px 14px;background:var(--soft);border-radius:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.vid button{font:inherit;font-weight:700;min-height:44px;padding:0 18px;border-radius:12px;border:2px solid var(--gin);background:var(--gin);color:#fff;cursor:pointer}
+.vid progress{width:100%;height:14px;accent-color:var(--gin)}
+.vid p{margin:0;width:100%}
+.vid video{width:min(100%,300px);aspect-ratio:9/16;border-radius:12px;background:#000;display:block}
+.vidbtns{display:flex;flex-direction:column;gap:10px}

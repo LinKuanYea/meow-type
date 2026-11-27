@@ -48,7 +48,7 @@ function playing() { const t = Date.now(); for (const [k, v] of active) if (t - 
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com", "connect-src 'self'", "img-src 'self' data: blob:",
+  "font-src https://fonts.gstatic.com", "connect-src 'self'", "img-src 'self' data: blob:", "media-src 'self' blob:",
   "base-uri 'none'", "frame-ancestors 'none'", "form-action 'none'",
 ].join("; ");
 const SEC_HEADERS = { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Content-Security-Policy": CSP, "Cache-Control": "no-cache" };
