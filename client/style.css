@@ -316,3 +316,4 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .denitem small{color:var(--todo);font-size:12px;line-height:1.35}
 .denitem small.how{font-size:11px}
 @media (max-width:760px){.denwrap{grid-template-columns:1fr}.denside{max-height:none}}
+.denstage canvas:focus-visible{outline:3px solid var(--gin);outline-offset:3px}

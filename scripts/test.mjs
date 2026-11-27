@@ -469,6 +469,7 @@ try {
     const dGet = async () => (await fetch(base + "/api/quest/den", { headers: DV })).json();
     const d0 = await dGet();
     ok(d0.login && d0.fish === 0 && d0.owned.length === 0 && d0.unlocked.length === 0 && d0.layout.length === 0 && d0.books.length === 0 && d0.news === 0, "貓窩：一開始是空的 " + JSON.stringify(d0));
+    eq(d0.cats, ["fur-orange"], "貓窩：一開始只有一隻橘貓");
     const dBuy0 = await xAdvpost("/api/quest/den/buy", { item: "den-box" }, DV);
     ok(dBuy0.status === 400 && (await dBuy0.json()).error.includes("不夠"), "貓窩：小魚乾不夠買不了");
     await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, DV);
@@ -496,6 +497,10 @@ try {
     const d1 = await dGet();
     ok(d1.books.includes("cpp-1") && d1.trophies.includes("cpp-1-5") && d1.unlocked.includes("den-books") && d1.unlocked.includes("den-trophy") && !d1.unlocked.includes("den-news") && d1.news === 0, "貓窩：打倒第 1 章 Boss，書櫃多一本書、獎盃架多一座獎盃 " + JSON.stringify(d1));
     ok(!d1.books.includes("cpp-2") && d1.trophies.length === 1, "貓窩：沒打倒的章不算");
+    const dF = await (await xAdvpost("/api/quest/buy", { item: "fur-gray" }, DV)).json();
+    ok(dF.ok && dF.owned.includes("fur-gray"), "貓窩：用小魚乾買灰貓毛色");
+    eq((await dGet()).cats, ["fur-orange", "fur-gray"], "貓窩：買了毛色就多一隻貓");
+    ok(!(await dGet()).owned.includes("fur-gray"), "貓窩：毛色不算家具");
     const dB2 = await (await xAdvpost("/api/quest/den/buy", { item: "den-cushion" }, DV)).json();
     ok(dB2.ok && dB2.owned.includes("den-cushion"), "貓窩：買坐墊");
     eq((await dSave([{ id: "den-box", x: 0, y: 3 }, { id: "den-cushion", x: 1, y: 3 }])).status, 400, "貓窩：家具重疊不行");
@@ -506,7 +511,7 @@ try {
     eq((await dGet()).layout, good, "貓窩：重新讀取擺設一樣");
     eq((await xAdvpost("/api/quest/den/save", { layout: good })).status, 401, "貓窩：別人（沒登入）不能改");
     ok(!(await (await fetch(base + "/api/quest/den", { headers: XAV })).json()).owned.includes("den-box"), "貓窩：每個人的家具分開");
-    ok((await get("/den.js")).status === 200 && (await get("/shared/den.js")).status === 200 && (await (await get("/quest")).text()).includes('id="goDen"'), "貓窩：前端程式與按鈕");
+    ok((await get("/den.js")).status === 200 && (await get("/den-cats.js")).status === 200 && (await get("/shared/den.js")).status === 200 && (await (await get("/quest")).text()).includes('id="goDen"'), "貓窩：前端程式與按鈕");
   }
   // 每日新聞
   const nList = await (await fetch(base + "/api/news", { headers: XAV })).json();
