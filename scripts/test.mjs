@@ -149,7 +149,8 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   eq(streakOf(["2026-11-24", "2026-11-26"], "2026-11-27"), 1, "中斷就重算");
   eq(addDays("2026-12-31", 1), "2027-01-01", "日期加一天");
   eq([newsFishFor(true, 0, 3, 0, 1, 2, 10), newsFishFor(true, 0, 1, 0, 3, 2, 10), newsFishFor(false, 0, 3, 0, 5, 2, 10), newsFishFor(false, 3, 3, 0, 0, 2, 10)], [30, 15, 12, 2], "每日新聞的小魚乾");
-  ok(ISLANDS[0].chapters[0].login === false && ISLANDS[0].chapters.slice(1).every((c) => c.login), "只有第 1 章不用登入");
+  for (const is of ISLANDS.filter((x) => x.open)) ok(is.chapters.length && is.chapters[0].login === false && is.chapters.slice(1).every((c) => c.login), `${is.name}：只有第 1 章不用登入`);
+  ok(ISLANDS.find((x) => x.id === "py").chapters.length === 5, "Python 島：5 章（照 MeowJudge 單元）");
 }
 // 英文、中文題庫：content/ 的資料檔和產生的 shared/bank-text.js 一致（部署的映像檔裡沒有 content/，就跳過）
 if (existsSync(path.join(ROOT, "content/en"))) {
@@ -413,6 +414,8 @@ try {
   const xA0 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") })).json();
   ok(xA0.ok && xA0.stars === 3 && xA0.fish === 0, "沒登入也能玩第 1 章（不給小魚乾） " + JSON.stringify(xA0));
   eq((await xAdvpost("/api/quest/clear", { level: "cpp-2-1", rule: "back", events: xFast("cpp-2-1") })).status, 401, "第 2 章要登入");
+  const xPy = await (await xAdvpost("/api/quest/clear", { level: "py-1-1", rule: "back", events: xFast("py-1-1") })).json();
+  ok(xPy.ok && xPy.stars === 3, "Python 島第 1 章：沒登入也能玩");
   eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "block", events: xFast("cpp-1-1") })).status, 400, "冒險模式也只收要倒退修");
   eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1").slice(0, 5) })).status, 400, "沒打完不算");
   const xAl3 = await fetch(base + "/auth/fake?sub=adv-1&email=adv@example.com", { redirect: "manual" });

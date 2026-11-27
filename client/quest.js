@@ -127,7 +127,8 @@ function play(lv) {
   });
   R.ty.setText(lv.texts[0]);
   $("#lvName").textContent = lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`;
-  $("#hint").textContent = (lv.lang === "cpp" || lv.lang === "py" ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來這一關・不能貼上";
+  const code = lv.lang === "cpp" || lv.lang === "py", cjk = code && lv.texts.some((t) => /[\u3000-\u9fff\uff00-\uffef]/.test(t));
+  $("#hint").textContent = (code ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來這一關・不能貼上" + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
   $("#lg").textContent = `${lv.target}`;
   battle.reset({ boss: lv.boss, hp: lv.texts.reduce((a, t) => a + t.length, 0), outfit: ST.outfit, big: lv.big });
   $("#res").hidden = true; $("#box").classList.remove("end");

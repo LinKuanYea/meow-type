@@ -53,7 +53,62 @@ export const ISLANDS = [
       },
     ],
   },
-  { id: "py", name: "Python 島", lang: "py", open: false, chapters: [] },
+  {
+    id: "py", name: "Python 島", lang: "py", open: true,
+    chapters: [
+      {
+        id: "py-1", name: "第 1 章　輸入與輸出", unit: "Basic Input and Output", login: false,
+        levels: [
+          { id: "py-1-1", name: "input 與 int", parts: [{ lines: ["r = input()", "r = int(r)", "pi = 3.1415926"] }], target: 15, boss: { name: "括號蝸牛", glyph: "()", color: "#7cc576" } },
+          { id: "py-1-2", name: "Hello Kitty", parts: [{ code: "py-hello" }], target: 15, learn: "py-hello", boss: { name: "引號小蛇", glyph: "''", color: "#e6a35a" } },
+          { id: "py-1-3", name: "Boss：f 字串蛇", parts: [{ lines: ["print(f'{r*r*pi:.4f}')"] }, { code: "py-circle" }], target: 15, learn: "py-circle", big: true, drop: "hat-beanie", boss: { name: "f 字串蛇", glyph: "f''", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "py-2", name: "第 2 章　選擇結構", unit: "Selection Structure", login: true,
+        levels: [
+          { id: "py-2-1", name: "if 和冒號", parts: [{ lines: ["if (bmi < 18):", "if (x % 1 == 0):", "if x % y == 0:", "height, weight = input().split()"] }], target: 18, boss: { name: "冒號甲蟲", glyph: ":", color: "#8f7cd6" } },
+          { id: "py-2-2", name: "型別轉換", parts: [{ lines: ["height = float(height) / 100", "bmi = weight / (height ** 2)", "x = float(x)", "x = int(x)", "x, y = input().split(' ')"] }], target: 18, boss: { name: "小數點蟲", glyph: ".0", color: "#5aa9e6" } },
+          { id: "py-2-3", name: "倍數判斷", parts: [{ code: "py-multiple" }], target: 18, learn: "py-multiple", boss: { name: "等號雙蛇", glyph: "==", color: "#7cc576" } },
+          { id: "py-2-4", name: "文文的求婚：閏年", parts: [{ code: "py-leap" }], target: 18, learn: "py-leap", boss: { name: "閏年兔", glyph: "%4", color: "#e6845a" } },
+          { id: "py-2-5", name: "Larger Number", parts: [{ code: "py-larger" }], target: 18, learn: "py-larger", boss: { name: "def 狐狸", glyph: "def", color: "#9aa0b5" } },
+          { id: "py-2-6", name: "Boss：BMI 魔人", parts: [{ code: "py-bmi" }], target: 18, learn: "py-bmi", big: true, drop: "neck-snake", boss: { name: "BMI 魔人", glyph: "elif", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "py-3", name: "第 3 章　條件迴圈", unit: "Conditional Loop", login: true,
+        levels: [
+          { id: "py-3-1", name: "while 的樣子", parts: [{ lines: ["while hp > 0:", "hp = hp - atk", "while n != 1:", "n = n // 2", "n = 3*n + 1"] }], target: 20, boss: { name: "迴圈陀螺", glyph: "↻", color: "#5aa9e6" } },
+          { id: "py-3-2", name: "換瓶子", parts: [{ lines: ["coke = money // 27", "while bottle >= 4:", "ex = bottle // 4", "bottle = bottle % 4", "bottle += ex", "money %= 27"] }], target: 20, boss: { name: "空瓶怪", glyph: "//", color: "#7cc576" } },
+          { id: "py-3-3", name: "魔王勇者", parts: [{ code: "py-boss" }], target: 20, learn: "py-boss", boss: { name: "魔王", glyph: "hp", color: "#8f7cd6" } },
+          { id: "py-3-4", name: "考拉茲猜想", parts: [{ code: "py-collatz" }], target: 20, learn: "py-collatz", boss: { name: "3n+1 怪", glyph: "3n", color: "#e6a35a" } },
+          { id: "py-3-5", name: "五數最大值", parts: [{ code: "py-max5-a" }], target: 20, learn: "py-max5-a", boss: { name: "最大值熊", glyph: ">", color: "#9aa0b5" } },
+          { id: "py-3-6", name: "Boss：快樂水魔", parts: [{ code: "py-coke" }], target: 20, learn: "py-coke", big: true, drop: "face-monocle", boss: { name: "快樂水魔", glyph: "while", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "py-4", name: "第 4 章　計數迴圈", unit: "Counting Loop", login: true,
+        levels: [
+          { id: "py-4-1", name: "for 和 range", parts: [{ lines: ["nums = map(int, input().split())", "for t in range(4):", "for n in nums:", "for i in range(2, N):", "for i in range(n-1):"] }], target: 20, boss: { name: "range 蜈蚣", glyph: "for", color: "#7cc576" } },
+          { id: "py-4-2", name: "迴圈裡的判斷", parts: [{ lines: ["if max_num == '?' or n > max_num:", "isPrime = True", "if N % i == 0:", "if isPrime:", "while t < N:", "t = t + 1"] }], target: 20, boss: { name: "布林貓頭鷹", glyph: "?", color: "#e6a35a" } },
+          { id: "py-4-3", name: "字串重複", parts: [{ code: "py-repeat" }], target: 20, learn: "py-repeat", boss: { name: "複製蟲", glyph: "×N", color: "#5aa9e6" } },
+          { id: "py-4-4", name: "五數最大值（一行輸入）", parts: [{ code: "py-max5-b" }], target: 20, learn: "py-max5-b", boss: { name: "map 章魚", glyph: "map", color: "#8f7cd6" } },
+          { id: "py-4-5", name: "等差數列", parts: [{ code: "py-seq" }], target: 20, learn: "py-seq", boss: { name: "公差蛇", glyph: "+d", color: "#9aa0b5" } },
+          { id: "py-4-6", name: "Boss：質數守門員", parts: [{ code: "py-prime" }], target: 20, learn: "py-prime", big: true, drop: "hat-headband", boss: { name: "質數守門員", glyph: "%", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "py-5", name: "第 5 章　list 與走訪", unit: "List and Iteration", login: true,
+        levels: [
+          { id: "py-5-1", name: "list 的樣子", parts: [{ lines: ["passed = []", "passed.append(score)", "scores = list(map(int, input().split()))", "for score in scores:", "total = total + score"] }], target: 22, boss: { name: "中括號蟹", glyph: "[]", color: "#5aa9e6" } },
+          { id: "py-5-2", name: "切片", parts: [{ lines: ["first = plain[0::2]", "second = plain[1::2]", "cypher = first + second", "print(*passed)", "average = total / n"] }], target: 22, boss: { name: "切片刀魚", glyph: "::", color: "#7cc576" } },
+          { id: "py-5-3", name: "柵欄密碼加密", parts: [{ code: "py-rail" }], target: 22, learn: "py-rail", boss: { name: "柵欄怪", glyph: "#", color: "#e6845a" } },
+          { id: "py-5-4", name: "及格與不及格", parts: [{ code: "py-pass" }], target: 22, learn: "py-pass", boss: { name: "append 鴨", glyph: ".add", color: "#8f7cd6" } },
+          { id: "py-5-5", name: "Boss：成績統計王", parts: [{ code: "py-stats" }], target: 22, learn: "py-stats", big: true, drop: "back-bag", boss: { name: "成績統計王", glyph: "avg", color: "#d65a5a" } },
+        ],
+      },
+    ],
+  },
   { id: "en", name: "英文島", lang: "en", open: false, chapters: [] },
   { id: "zh", name: "中文島", lang: "zh", open: false, chapters: [] },
 ];
