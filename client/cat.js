@@ -19,14 +19,22 @@ export function drawCat(ctx, x, y, s, f = 0, pal = PAL.me) {
 
 /* ---------- 換裝後的貓（冒險模式、換裝頁）：16 × 14 格，最上面 2 列留給帽子 ---------- */
 const LAYER_ORDER = ["back", "neck", "face", "hat"];
+/** 穿好衣服的貓的每一格：[x, y, 顏色]（16 × 14） */
+function dressedPixels(f, outfit, tint) {
+  const fur = (ITEM.get(outfit?.fur) || ITEM.get("fur-orange")).fur, out = [];
+  BODY.concat(LEGS[f]).forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") out.push([i, j + 2, tint || fur[c]]); }));
+  for (const slot of LAYER_ORDER) {
+    const it = ITEM.get(outfit?.[slot]);
+    if (!it?.art) continue;
+    it.art.forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") out.push([i, it.y + j, tint || it.pal[c]]); }));
+  }
+  return out;
+}
 /** 在 canvas 上畫穿好衣服的貓：左上角 (x, y)，每格 s 像素；flip＝面向左 */
 export function drawDressed(ctx, x, y, s, f = 0, outfit = DEFAULT_OUTFIT, opt = {}) {
-  const fur = (ITEM.get(outfit.fur) || ITEM.get("fur-orange")).fur;
-  const px = (i, j, c) => { ctx.fillStyle = c; ctx.fillRect(x + (opt.flip ? 15 - i : i) * s, y + j * s, s + 0.5, s + 0.5); };
-  BODY.concat(LEGS[f]).forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") px(i, j + 2, opt.tint || fur[c]); }));
-  for (const slot of LAYER_ORDER) {
-    const it = ITEM.get(outfit[slot]);
-    if (!it?.art) continue;
-    it.art.forEach((row, j) => [...row].forEach((c, i) => { if (c !== ".") px(i, it.y + j, opt.tint || it.pal[c]); }));
-  }
+  for (const [i, j, c] of dressedPixels(f, outfit, opt.tint)) { ctx.fillStyle = c; ctx.fillRect(x + (opt.flip ? 15 - i : i) * s, y + j * s, s + 0.5, s + 0.5); }
+}
+/** 一般練習跑道上的貓（SVG） */
+export function dressedSVG(f, outfit) {
+  return `<svg class="dressed" viewBox="0 0 16 14" shape-rendering="crispEdges" aria-hidden="true">${dressedPixels(f, outfit).map(([x, y, c]) => `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${c}"/>`).join("")}</svg>`;
 }

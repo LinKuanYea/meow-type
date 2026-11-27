@@ -10,6 +10,7 @@ import { Typist, replay, summarize, MAX_AHEAD } from "../shared/judge.js";
 import { analyze, tips, classify, drillText } from "../shared/analyze.js";
 import { ISLANDS, LEVELS, starsOf, fishFor, FISH } from "../shared/quest.js";
 import { ITEMS, ITEM, cleanOutfit } from "../shared/items.js";
+import { newsLevel, newsFishFor, streakOf, twDate, addDays, NEWS_FISH } from "../shared/news.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let pass = 0, fail = 0;
@@ -121,6 +122,11 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   eq([starsOf(lv, { acc: 0.8, speed: 99 }), starsOf(lv, { acc: 0.9, speed: 99 }), starsOf(lv, { acc: 0.96, speed: 1 }), starsOf(lv, { acc: 0.96, speed: 99 })], [0, 1, 2, 3], "星星的條件");
   eq([fishFor(lv, 0, 3, 0), fishFor(lv, 1, 3, 0), fishFor(lv, 3, 3, 0), fishFor(lv, 3, 3, FISH.replayPerDay), fishFor(LEVELS.get("cpp-1-5"), 0, 1, 0)], [30, 20, 2, 0, 30], "小魚乾的算法");
   eq(cleanOutfit({ fur: "fur-black", hat: "hat-cap", neck: "nope" }, new Set(["hat-cap"])), { fur: "fur-orange", hat: "hat-cap" }, "沒擁有的裝扮穿不上");
+  eq(streakOf(["2026-11-25", "2026-11-26", "2026-11-27"], "2026-11-27"), 3, "連續天數");
+  eq(streakOf(["2026-11-25", "2026-11-26"], "2026-11-27"), 2, "今天還沒打：從昨天算");
+  eq(streakOf(["2026-11-24", "2026-11-26"], "2026-11-27"), 1, "中斷就重算");
+  eq(addDays("2026-12-31", 1), "2027-01-01", "日期加一天");
+  eq([newsFishFor(true, 0, 3, 0, 1, 2, 10), newsFishFor(true, 0, 1, 0, 3, 2, 10), newsFishFor(false, 0, 3, 0, 5, 2, 10), newsFishFor(false, 3, 3, 0, 0, 2, 10)], [30, 15, 12, 2], "每日新聞的小魚乾");
   ok(ISLANDS[0].chapters[0].login === false && ISLANDS[0].chapters.slice(1).every((c) => c.login), "只有第 1 章不用登入");
 }
 // 英文、中文題庫：content/ 的資料檔和產生的 shared/bank-text.js 一致（部署的映像檔裡沒有 content/，就跳過）
@@ -367,6 +373,11 @@ try {
   await post("/admin/scores", `kind=score&id=${botId}&action=unapprove`, AC2);
   ok(!(await (await get("/api/board?c=cpp&l=para&m=full&p=all")).json()).some((r) => r.name === "機器人"), "取消放行後下榜");
   eq((await fetch(base + "/admin/scores", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...AC2 }, body: `kind=score&id=${orange}&action=hide`, redirect: "manual" })).headers.get("location"), "/admin?m=origin", "沒有 Origin 的標記要擋");
+  ok((await (await get("/admin/news", AC2)).text()).includes("太空望遠鏡"), "管理頁看得到每日新聞");
+  ok((await post("/admin/news", "date=2026-11-27&action=hide", AC2)).headers.get("location").includes("m=newshid"), "下架每日新聞");
+  eq((await get("/api/news/2026-11-27")).status, 404, "下架後學生看不到");
+  ok((await post("/admin/news", "date=2026-11-27&action=show", AC2)).headers.get("location").includes("m=newsshow"), "恢復上架");
+  eq((await get("/api/news/2026-11-27")).status, 200, "恢復後看得到");
   await fetch(base + "/admin/logout", { method: "POST", headers: { ...O, ...AC2 }, redirect: "manual" });
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;
@@ -408,6 +419,20 @@ try {
   let xPoor = 0; for (let k = 0; k < 20; k++) { const r = await xAdvpost("/api/quest/buy", { item: ["fur-black", "fur-white", "face-shades", "neck-red", "neck-blue", "fur-gray", "fur-cream", "hat-fisher"][k % 8] }, XAV); if (r.status === 400) xPoor++; }
   ok(xPoor > 0, "小魚乾不夠就買不了");
   ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).fish >= 0, "小魚乾不會變負的");
+  // 每日新聞
+  const nList = await (await fetch(base + "/api/news", { headers: XAV })).json();
+  ok(nList.today === twDate() && nList.list.some((n) => n.date === "2026-11-27") && nList.list.every((n) => n.date <= nList.today), "每日新聞列表（不含未來的日期）");
+  const nDay = await (await get("/api/news/2026-11-27")).json();
+  ok(nDay.paras.length >= 2 && nDay.vocab.length >= 5 && nDay.sources[0].url.startsWith("https://"), "讀一天的新聞");
+  eq((await get("/api/news/2099-01-01")).status, 404, "未來或不存在的日期");
+  const nLv = newsLevel(nDay), nEv = human(nLv.texts, { seed: 4, gap: [45, 120], errRate: 0 }).evs;
+  const nA = await (await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", events: nEv })).json();
+  ok(nA.ok && nA.stars === 3 && nA.fish === 0, "沒登入也能打每日新聞（沒有小魚乾）");
+  const nB = await (await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", events: nEv }, XAV)).json();
+  eq(nB.fish, 3 * (nDay.date === twDate() ? NEWS_FISH.today : NEWS_FISH.history), "每日新聞第一次三星的小魚乾");
+  eq((await xAdvpost("/api/quest/clear", { level: "news-2099-01-01", rule: "back", events: nEv })).status, 400, "不存在的新聞不能打");
+  const nBoard = await (await fetch(base + "/api/news/2026-11-27/board", { headers: XAV })).json();
+  ok(nBoard.length === 1 && nBoard[0].me && nBoard[0].stars === 3, "每日新聞排行榜");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
   ok(!JSON.stringify(ex).includes("cat@example.com") && !JSON.stringify(ex).includes("g-123"), "匯出資料不含 email 與 Google 編號");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }

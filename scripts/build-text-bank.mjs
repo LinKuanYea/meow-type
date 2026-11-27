@@ -127,7 +127,7 @@ for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filte
   if (!Array.isArray(n.vocab) || n.vocab.length < 5 || n.vocab.length > 12) err(where, "vocab：5～12 個");
   for (const [k, vb] of (n.vocab || []).entries()) {
     const w2 = `${where} vocab[${k}]`;
-    if (!vb.w || !vb.zh || !POS.test(vb.pos || "") || ![1, 2, 3, 4, 5, 6].includes(vb.lv)) err(w2, "要有 w、pos、zh、lv（大考詞彙級數 1～6）");
+    if (!vb.w || !vb.zh || !POS.test(vb.pos || "") || ![1, 2, 3].includes(vb.lv)) err(w2, "要有 w、pos、zh、lv（1 國中、2 高中、3 進階）");
     else if (!(n.paras || []).join(" ").toLowerCase().includes(vb.w.toLowerCase().split(" ")[0])) err(w2, `文章裡找不到「${vb.w}」`);
   }
   if (!Array.isArray(n.questions) || n.questions.length < 2 || n.questions.length > 3) err(where, "questions：2～3 題");

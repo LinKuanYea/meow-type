@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
-import { initAdventure, advState, advClear, advBuy, advWear } from "./quest.js";
+import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard } from "./quest.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
@@ -64,6 +64,12 @@ export const server = http.createServer(async (req, res) => {
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
     if (url.pathname === "/api/quest") return json(res, 200, advState(currentUser(req)));
+    if (url.pathname === "/api/news") return json(res, 200, newsOverview(currentUser(req)));
+    const nm = /^\/api\/news\/(\d{4}-\d{2}-\d{2})(\/board)?$/.exec(url.pathname);
+    if (nm) {
+      const r = nm[2] ? newsBoard(nm[1], currentUser(req)) : getNews(nm[1]);
+      return r ? json(res, 200, r) : json(res, 404, { error: "找不到這一天的新聞" });
+    }
     if (url.pathname === "/api/me") {
       const u = currentUser(req);
       return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "", nickNext: nickNextChange(u), banned: !!u.banned } : null });

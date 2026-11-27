@@ -253,3 +253,21 @@ table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{bor
 /* 程式碼不要連字（JetBrains Mono 會把 <= 顯示成 ≤，學生會以為要打 ≤） */
 code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
 .panel a{color:var(--gin)}
+/* 每日新聞 */
+.streak{font-size:15px;margin-left:10px;color:var(--bad)}
+.today{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.today .lvl{min-height:140px}
+.today .lvl.news .lvt{font-size:20px}
+.lvl .go{font-weight:700;color:var(--gin);margin-top:4px}
+.today h4{margin:0 0 6px}
+.lvl.news .lvt{font-size:15px}
+.vocab td{white-space:normal}
+.nq{border:2px solid var(--line);border-radius:12px;margin:10px 0;padding:8px 14px}
+.nq legend{font-weight:700;padding:0 4px}
+.nq label{display:block;padding:4px 6px;border-radius:8px;cursor:pointer}
+.nq label.right{background:color-mix(in srgb,var(--grass) 25%,transparent);font-weight:700}
+.nq label.wrong{background:var(--badbg)}
+.nq .why{margin:6px 0 2px;color:var(--ink)}
+@media (max-width:720px){.today{grid-template-columns:1fr}}
+.cat svg.dressed{height:56px}
+.cat.dressed span{bottom:60px}

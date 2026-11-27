@@ -7,6 +7,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { renderStatsBody, exportAll, getSetting, setSetting, dbh, FLAG, RULE, HIDDEN_NAME } from "./stats.js";
 import { CAT_NAME, LEN_NAME } from "../shared/bank.js";
+import { newsIndex, setNewsHidden, getNews } from "./quest.js";
+import { twDate } from "../shared/news.js";
 import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
@@ -80,7 +82,7 @@ code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-br
 </style></head><body>${body}</body></html>`);
 }
 function shell(res, cur, inner, msg, me) {
-  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <!--email_off--><main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main><!--/email_off-->`);
@@ -92,6 +94,7 @@ const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 
   pwon: "已重新啟用密碼登入。", banned: "已停權：這個帳號的排行榜成績和分享連結都不再顯示，也不能再上榜、分享或改暱稱。", unbanned: "已恢復，成績和分享會重新顯示。",
   hidden: "已標記暱稱不雅：成績保留、名次不變，暱稱改顯示「" + HIDDEN_NAME + "」。", unhidden: "已取消標記，暱稱重新顯示。",
   approved: "已放行：這筆成績會出現在排行榜。", unapproved: "已取消放行：這筆成績不再出現在排行榜。",
+  newshid: "已下架：學生看不到這一天的新聞（資料還在，可以恢復）。", newsshow: "已恢復上架。",
   banadmin: "管理員不能停權，請先取消管理員。", needgoogle: "要先用管理員的 Google 帳號登入管理頁，才能停用密碼登入（避免把自己鎖在外面）。", nopw: "伺服器沒有設定管理密碼，不能啟用密碼登入。" };
 const ERRS = ["bad", "origin", "last", "needgoogle", "nopw", "banadmin"];
 
@@ -175,6 +178,14 @@ export async function handleAdmin(req, res, url) {
       console.warn(`[管理] ${act === "approve" ? "放行" : "取消放行"}可疑成績 #${id}`);
       redirect(res, `/admin/scores?m=${act === "approve" ? "approved" : "unapproved"}${back}`); return true;
     }
+    if (p === "/admin/news") {
+      const f = await readForm(req);
+      const date = String(f?.get("date") || ""), act = f?.get("action");
+      if (!getNews(date, true) || !["hide", "show"].includes(act)) { redirect(res, "/admin/news?m=bad"); return true; }
+      setNewsHidden(date, act === "hide");
+      console.warn(`[管理] 每日新聞 ${date}：${act === "hide" ? "下架" : "恢復"}`);
+      redirect(res, `/admin/news?m=${act === "hide" ? "newshid" : "newsshow"}`); return true;
+    }
     if (p === "/admin/security") {
       const f = await readForm(req), act = f?.get("action");
       if (act === "disable_password") {
@@ -212,6 +223,7 @@ export async function handleAdmin(req, res, url) {
   const msg = m ? { text: m, err: ERRS.includes(url.searchParams.get("m")) } : null;
   if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg, me); return true; }
   if (p === "/admin/scores") { shell(res, "/admin/scores", scoresPage(url), msg, me); return true; }
+  if (p === "/admin/news") { shell(res, "/admin/news", newsPage(), msg, me); return true; }
   if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
   if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
   if (p === "/admin/data") { shell(res, "/admin/data", dataPage(), msg, me); return true; }
@@ -267,6 +279,20 @@ ${f ? "" : `<h2>分享連結</h2>
 <div class="wrap"><table><thead><tr><th>連結</th><th>時間</th><th>暱稱</th><th>題目</th><th>速度</th><th>被打開</th><th>接受挑戰</th><th></th></tr></thead><tbody>
 ${shares.map((r) => `<tr><td><a href="/c/${esc(r.id)}" target="_blank" rel="noopener">${esc(r.id)}</a></td><td>${tw(r.ts)}</td><td>${nameCell(r)}</td><td>${what(r)}</td><td>${speed(r)}</td><td>${r.views}</td><td>${r.accepts}</td><td>${hideBtn("share", r)}</td></tr>`).join("")
   || '<tr><td colspan="8">還沒有分享。</td></tr>'}</tbody></table></div><p class="n">最多列最近 100 筆。</p>`}`;
+}
+
+function newsPage() {
+  const list = newsIndex(true), today = twDate();
+  const stat = Object.fromEntries(dbh().prepare(`SELECT level, COUNT(*) n, COUNT(DISTINCT user_id) u, SUM(stars>0) ok, AVG(speed) sp FROM adv_runs WHERE level LIKE 'news-%' AND flag='' GROUP BY level`).all().map((r) => [r.level.slice(5), r]));
+  return `<h1>每日新聞</h1>
+<p>每天清晨由 Claude 的排程工作找一則國際新聞、用自己的話改寫成高中程度的英文短文，推到 GitHub 後自動上線（不用核准）。內容有問題可以在這裡<b>下架</b>，學生就看不到那一天；資料還在，可以恢復。要修改內容請請 Claude 改 <code>content/news/日期.json</code>。</p>
+<div class="wrap"><table><thead><tr><th>日期</th><th>標題</th><th>主題</th><th>過關次數</th><th>人數</th><th>過關率</th><th>平均速度</th><th>狀態</th><th></th></tr></thead><tbody>
+${list.map((n) => { const s = stat[n.date] || {}; const nw = getNews(n.date, true);
+    return `<tr${n.hidden ? ' class="bn"' : ""}><td>${n.date}${n.date === today ? "（今天）" : ""}</td><td>${esc(n.title)}<br><span class="n">${(nw?.sources || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}</span></td><td>${esc(n.topic)}</td>
+    <td>${s.n || 0}</td><td>${s.u || 0}</td><td>${s.n ? pct(s.ok / s.n) : "—"}</td><td>${s.sp ? Math.round(s.sp) : "—"}</td>
+    <td>${n.hidden ? '<span class="no">已下架</span>' : n.date > today ? "還沒到" : '<span class="ok">上線</span>'}</td>
+    <td><form method="post" action="/admin/news" class="inl"><input type="hidden" name="date" value="${n.date}"><input type="hidden" name="action" value="${n.hidden ? "show" : "hide"}"><button type="submit" class="small ${n.hidden ? "sec" : "warn"}">${n.hidden ? "恢復" : "下架"}</button></form></td></tr>`; }).join("")
+  || '<tr><td colspan="9">還沒有新聞。</td></tr>'}</tbody></table></div>`;
 }
 
 function usersPage(me) {

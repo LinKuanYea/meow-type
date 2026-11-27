@@ -2,7 +2,7 @@
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
 import { ME, loadMe, onLogin, loginHint, nickField, bannedNote, askLogin } from "/account.js";
-import { catSVG } from "/cat.js";
+import { catSVG, dressedSVG } from "/cat.js";
 import { TypeBox } from "/typebox.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
@@ -40,6 +40,16 @@ let R = null, raf = 0, lastSpec = null;
 /* ---------- 像素貓 ---------- */
 const SV = [[catSVG(0, 0), catSVG(1, 0)], [catSVG(0, 1), catSVG(1, 1)]];
 const me = $("#me"), gh = $("#ghost");
+/** 登入的人：跑道上的貓穿上冒險模式的裝扮 */
+async function loadOutfit() {
+  if (!ME.user) { SV[0] = [catSVG(0, 0), catSVG(1, 0)]; me.classList.remove("dressed"); me._f = -1; setCat(me, 0, 0); return; }
+  try {
+    const q = await (await fetch("/api/quest", { cache: "no-store" })).json();
+    if (!q.outfit) return;
+    SV[0] = [dressedSVG(0, q.outfit), dressedSVG(1, q.outfit)];
+    me.classList.add("dressed"); me._f = -1; setCat(me, 0, 0);
+  } catch {}
+}
 function setCat(el, g, f) { if (el._f === f) return; el.querySelector("svg")?.remove(); el.insertAdjacentHTML("afterbegin", SV[g][f]); el._f = f; }
 setCat(me, 0, 0); setCat(gh, 1, 0);
 function placeCat(el, p) { const w = $("#track").clientWidth - 64 - 36; el.style.left = 6 + Math.max(0, Math.min(1, p)) * w + "px"; }
@@ -387,10 +397,10 @@ setInterval(checkVersion, 60000);
 
 /* ---------- 開始 ---------- */
 syncSeg(); syncUnit(); newRun(); loadBoard();
-loadMe().then(() => { loadBoard(); if (consent !== null && !shareId) askLogin(); });
+loadMe().then(() => { loadBoard(); loadOutfit(); if (consent !== null && !shareId) askLogin(); });
 // 登入或登出後：排行榜的「你」要重新判斷，結算畫面的登入提示拿掉、暱稱帶入
 onLogin(() => {
-  loadBoard();
+  loadBoard(); loadOutfit();
   document.querySelectorAll(".loginhint").forEach((x) => x.remove());
   syncNickFields();
   if (ME.user) toast("登入了！之後的練習會記在「我的紀錄」");

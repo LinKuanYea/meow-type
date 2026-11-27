@@ -2,6 +2,7 @@
 import { ISLANDS, LEVELS, starsOf, unlocked, STAR_RULE, FISH, learnItem } from "/shared/quest.js";
 import { ITEMS, ITEM, SLOTS, DEFAULT_OUTFIT } from "/shared/items.js";
 import { BANK } from "/shared/bank.js";
+import { newsLevel, NEWS_FISH, NEWS_TARGET } from "/shared/news.js";
 import { Typist, summarize } from "/shared/judge.js";
 import { esc } from "/shared/analyze.js";
 import { ME, loadMe, onLogin, login, askLogin } from "/account.js";
@@ -43,8 +44,9 @@ const starsTxt = (n, max = 3) => "★".repeat(n) + "☆".repeat(max - n);
 let island = store.get("mt-adv-island", "cpp");
 function renderMap() {
   show("map");
-  $("#islands").innerHTML = ISLANDS.map((is) => `<button type="button" data-v="${is.id}" aria-pressed="${is.id === island}"${is.open ? "" : ' class="soon"'}>${esc(is.name)}${is.open ? "" : "（準備中）"}</button>`).join("");
-  const is = ISLANDS.find((x) => x.id === island);
+  $("#islands").innerHTML = `<button type="button" data-v="news" aria-pressed="${island === "news"}">📰 每日新聞</button>` + ISLANDS.map((is) => `<button type="button" data-v="${is.id}" aria-pressed="${is.id === island}"${is.open ? "" : ' class="soon"'}>${esc(is.name)}${is.open ? "" : "（準備中）"}</button>`).join("");
+  if (island === "news") return renderNews();
+  const is = ISLANDS.find((x) => x.id === island) || ISLANDS[0];
   $("#mapHint").innerHTML = !is.open ? "這座島還在蓋，先到 C++ 島冒險吧！"
     : `${STAR_RULE}。${ST.login ? "" : `<b>沒登入只能玩第 1 章，也拿不到小魚乾和裝扮。</b><button type="button" class="link" id="mapLogin">用 Google 登入</button>`}`;
   $("#mapLogin")?.addEventListener("click", login);
@@ -62,7 +64,44 @@ $("#islands").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   island = b.dataset.v; store.set("mt-adv-island", island); renderMap();
 });
-$("#chapters").addEventListener("click", (e) => { const b = e.target.closest("[data-lv]"); if (b && !b.disabled) play(LEVELS.get(b.dataset.lv)); });
+$("#chapters").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-lv]"); if (b && !b.disabled) return play(LEVELS.get(b.dataset.lv));
+  const n = e.target.closest("[data-news]"); if (n) playNews(n.dataset.news);
+});
+
+/* ---------- 每日新聞 ---------- */
+const fmtDate = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${m} 月 ${dd} 日（${"日一二三四五六"[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]}）`; };
+async function renderNews() {
+  $("#mapHint").innerHTML = `每天一篇國際新聞（高中程度的英文改寫），打完學單字、答理解題。${STAR_RULE.replace(/速度達標/, `速度 ${NEWS_TARGET} WPM`)}。`
+    + (ST.login ? `當天打完：每顆新星 ${NEWS_FISH.today} 條小魚乾，連續 ${NEWS_FISH.streakMin} 天以上再加 ${NEWS_FISH.streakBonus} 條；以前的新聞每顆星 ${NEWS_FISH.history} 條。` : `<b>登入才能拿小魚乾、記連續天數。</b><button type="button" class="link dologin">用 Google 登入</button>`);
+  $("#chapters").innerHTML = '<p class="empty">載入中…</p>';
+  const r = online ? await api("/api/news") : { error: "要連上伺服器" };
+  if (island !== "news") return;
+  if (r.error) { $("#chapters").innerHTML = `<p class="empty">${esc(r.error)}</p>`; return; }
+  const today = r.list.find((n) => n.date === r.today), rest = r.list.filter((n) => n !== today);
+  const card = (n, big) => `<button type="button" class="lvl news${big ? " big" : ""}${n.stars ? " done" : ""}" data-news="${n.date}">
+    <span class="lvn">${fmtDate(n.date)}・${esc(n.topic)}</span><span class="lvt">${esc(n.title)}</span><span class="lvs" aria-label="${n.stars} 顆星">${starsTxt(n.stars)}</span>${big ? `<span class="go">${n.stars ? "再打一次" : "開始今日任務"} →</span>` : ""}</button>`;
+  $("#chapters").innerHTML = `<div class="chap"><h3>今日任務${ST.login && r.streak ? `<span class="streak">🔥 連續 ${r.streak} 天</span>` : ""}</h3>
+    ${today ? `<div class="today">${card(today, true)}<div class="board" id="nBoard"><p class="empty">排行榜載入中…</p></div></div>` : `<p class="empty">今天的新聞還沒出來（每天清晨更新），先玩以前的吧！</p>`}</div>
+    ${rest.length ? `<div class="chap"><h3>以前的新聞</h3><ol class="lvls">${rest.map((n) => `<li>${card(n)}</li>`).join("")}</ol></div>` : ""}`;
+  if (today) {
+    const b = await api(`/api/news/${today.date}/board`);
+    const el = $("#nBoard"); if (!el) return;
+    el.innerHTML = `<h4>今天的排行榜</h4>` + (b.error || !b.length ? '<p class="empty">還沒有人打完，搶第一個！</p>'
+      : `<table class="lb"><tbody>${b.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}${x.me ? "（你）" : ""}</td><td class="n">${Math.round(x.speed)}</td><td class="n">${starsTxt(x.stars)}</td></tr>`).join("")}</tbody></table>`);
+  }
+}
+async function playNews(date) {
+  const n = await api("/api/news/" + date);
+  if (n.error) return toast(n.error);
+  play(newsLevel(n));
+}
+function newsLearn(n) {
+  const LV = (x) => ["", "國中", "高中", "進階"][x] || "";
+  return `<div class="learn"><h3>單字</h3><table class="lb vocab"><tbody>${n.vocab.map((v) => `<tr><td><b>${esc(v.w)}</b></td><td>${esc(v.pos)}</td><td>${esc(v.zh)}</td><td class="n"><span class="lv">${LV(v.lv)}</span></td></tr>`).join("")}</tbody></table>
+    <h3>讀懂了嗎？</h3>${n.questions.map((q, i) => `<fieldset class="nq" data-a="${q.answer}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label><input type="radio" name="nq${i}" value="${k}"> ${esc(o)}</label>`).join("")}<p class="why" hidden>${esc(q.why)}</p></fieldset>`).join("")}
+    <p class="hint">原始報導：${n.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}（這篇是用自己的話改寫的練習文章）</p></div>`;
+}
 function show(id) { for (const s of ["map", "play", "closet"]) $("#" + s).hidden = s !== id; }
 
 /* ---------- 戰鬥 ---------- */
@@ -86,7 +125,8 @@ function play(lv) {
     queueMicrotask(finish);
   });
   R.ty.setText(lv.texts[0]);
-  $("#lvName").textContent = `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`;
+  $("#lvName").textContent = lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`;
+  $("#hint").textContent = (lv.lang === "cpp" || lv.lang === "py" ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來這一關・不能貼上";
   $("#lg").textContent = `${lv.target}`;
   battle.reset({ boss: lv.boss, hp: lv.texts.reduce((a, t) => a + t.length, 0), outfit: ST.outfit, big: lv.big });
   $("#res").hidden = true; $("#box").classList.remove("end");
@@ -101,7 +141,7 @@ function frame() {
     battle.combo = R.combo;
     battle.draw(now());
     if (R.start && !R.ended) live();
-    if (!R.ended || now() - R.endedAt < 1500) frame();
+    if (!R.ended || R.waiting || now() - Math.max(R.endedAt, battle.won || 0) < 1500) frame();
   });
 }
 function event(ev) {
@@ -140,20 +180,24 @@ async function finish() {
   live(); TB.paint();
   const sum = summarize(R.ty, lv.lang, Math.max(1, R.endT));
   const local = starsOf(lv, sum);
-  if (local > 0) battle.win(now() + 300);
   const prev = ST.stars[lv.id] || 0;
   let out = { stars: local, fish: 0, drops: [], flagged: false };
   $("#res").innerHTML = `<div class="res"><h2>結算中…</h2></div>`; $("#res").hidden = false;
   if (online) {
+    const run = R; run.waiting = true;
     const r = await api("/api/quest/clear", { level: lv.id, rule: R.rule, events: R.ty.events.slice() });
     if (r.error) out.error = r.error; else out = r;
+    run.waiting = false;
   }
   if (ST.login && !out.error) { ST.stars[lv.id] = Math.max(prev, out.stars); if (typeof out.total === "number") ST.fish = out.total; out.drops.forEach((d) => ST.owned.push(d)); $("#fish").textContent = `🐟 ${ST.fish}`; }
   if (!ST.login && out.stars > prev) { ST.stars[lv.id] = out.stars; store.set(LOCAL, ST.stars); }
+  if (!R || R.lv !== lv || !R.ended) return; // 等結果的時候已經離開這一關（進度照樣記下）
+  if (out.stars > 0) battle.win(now());
   renderResult(lv, sum, out, prev);
 }
 
 function nextLevel(lv) {
+  if (lv.news) return null;
   for (const is of ISLANDS) for (const ch of is.chapters) { const k = ch.levels.indexOf(lv); if (k >= 0) return ch.levels[k + 1] || is.chapters[is.chapters.indexOf(ch) + 1]?.levels[0] || null; }
   return null;
 }
@@ -161,7 +205,7 @@ function renderResult(lv, sum, out, prev) {
   const s = out.stars, nx = nextLevel(lv);
   const canNext = nx && s > 0 && (!nx.login || ST.login);
   const it = learnItem(lv), spec = it ? { c: lv.lang, l: it.len, i: [BANK[lv.lang][it.len].indexOf(it)] } : null;
-  const L = spec ? learnCard(spec, lv.lang, it.len) : null;
+  const L = spec ? learnCard(spec, lv.lang, it.len) : lv.news ? { html: newsLearn(lv.news), bind: bindNewsQuiz } : null;
   const why = s === 0 ? (out.flagged ? "這次的打字節奏不太像人打的，不算過關。" : "正確率要 85% 以上才算打倒怪物，再試一次！")
     : s === 1 ? "正確率 95% 以上就有第 2 顆星。" : s === 2 ? `速度到 ${lv.target} WPM 就有第 3 顆星。` : "三顆星全拿！";
   $("#res").innerHTML = `<div class="res questres">
@@ -171,7 +215,7 @@ function renderResult(lv, sum, out, prev) {
       <div class="s"><small>正確率</small><strong>${Math.round(sum.acc * 100)}%</strong></div>
       <div class="s"><small>時間</small><strong>${(sum.ms / 1000).toFixed(1)} 秒</strong></div></div>
     ${out.error ? `<p class="nickrule">${esc(out.error)}</p>` : ""}
-    ${ST.login ? (out.fish ? `<p class="gain">🐟 +${out.fish} 小魚乾（現在 ${ST.fish} 條）</p>` : s && s <= prev ? `<p class="hint">重打已經拿過的星星：每次 ${FISH.replay} 條小魚乾，每天最多 ${FISH.replayPerDay} 次。</p>` : "")
+    ${ST.login ? (out.fish ? `<p class="gain">🐟 +${out.fish} 小魚乾（現在 ${ST.fish} 條）${out.streak ? `　🔥 連續 ${out.streak} 天` : ""}</p>` : s && s <= prev ? `<p class="hint">重打已經拿過的星星：每次 ${FISH.replay} 條小魚乾，每天最多 ${FISH.replayPerDay} 次。</p>` : "")
       : `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>就能拿小魚乾、換裝，進度也會存起來（第 2 章以後要登入）。</p>`}
     ${out.drops?.length ? `<div class="drop"><canvas id="dropCv" width="160" height="140"></canvas><p>獲得裝扮：<b>${esc(ITEM.get(out.drops[0]).name)}</b>！到「換裝」穿上它。</p></div>` : ""}
     ${L ? L.html : ""}
@@ -180,8 +224,18 @@ function renderResult(lv, sum, out, prev) {
   if (L) L.bind($("#res"), { answered: 0, correct: 0, skipped: 0, opened: 0, onAnswer: (ok) => ok && toast("答對了！") });
   $("#bAgain").onclick = () => play(lv);
   $("#bMap").onclick = renderMap;
+  if (lv.news) $("#bMap").textContent = "回新聞列表";
   if (canNext) $("#bNext").onclick = () => play(nx);
   $("#res").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+function bindNewsQuiz(root) {
+  root.querySelectorAll(".nq").forEach((fs) => fs.addEventListener("change", (e) => {
+    const k = Number(e.target.value), a = Number(fs.dataset.a);
+    fs.querySelectorAll("label").forEach((l, i) => { l.classList.toggle("right", i === a); l.classList.toggle("wrong", i === k && k !== a); });
+    fs.querySelector(".why").hidden = false;
+    fs.querySelectorAll("input").forEach((x) => { x.disabled = true; });
+    toast(k === a ? "答對了！" : "再看一次文章找找看");
+  }));
 }
 $("#back").onclick = () => { R = null; cancelAnimationFrame(raf); renderMap(); };
 
