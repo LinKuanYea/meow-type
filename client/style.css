@@ -278,3 +278,7 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .vid p{margin:0;width:100%}
 .vid video{width:min(100%,300px);aspect-ratio:9/16;border-radius:12px;background:#000;display:block}
 .vidbtns{display:flex;flex-direction:column;gap:10px}
+.vqr{font:inherit;font-weight:700;min-height:44px;padding:0 14px;border-radius:12px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer}
+.qrbox{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.qrbox svg{border-radius:8px;border:2px solid var(--line)}
+.qrbox p{flex:1;min-width:200px}

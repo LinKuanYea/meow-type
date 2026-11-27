@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
-import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard } from "./quest.js";
+import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink } from "./quest.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
@@ -29,6 +29,7 @@ const VERSION_LABEL = `v${PKG_VERSION}（${APP_VERSION}${APP_BUILT ? `・${APP_B
 console.log(`喵打 ${VERSION_LABEL}`);
 initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
 initAdventure();
+initVlinks();
 
 /* ---------- Node 版本檢查（2026-10-21 資安更新） ---------- */
 const PATCHED = { 22: [22, 23, 4], 24: [24, 22, 1], 26: [26, 12, 1] };
@@ -65,6 +66,8 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
     if (url.pathname === "/api/quest") return json(res, 200, advState(currentUser(req)));
     if (url.pathname === "/api/news") return json(res, 200, newsOverview(currentUser(req)));
+    const vm = /^\/api\/vlink\/([0-9A-Za-z]{8})$/.exec(url.pathname);
+    if (vm) { const v = getVlink(vm[1]); return v ? json(res, 200, v) : json(res, 404, { error: "這個影片連結不存在或已經過期（7 天）" }); }
     const nm = /^\/api\/news\/(\d{4}-\d{2}-\d{2})(\/board)?$/.exec(url.pathname);
     if (nm) {
       const r = nm[2] ? newsBoard(nm[1], currentUser(req)) : getNews(nm[1]);
@@ -92,6 +95,7 @@ export const server = http.createServer(async (req, res) => {
     if (p === "/" || shareId) p = "/index.html";
     if (p === "/me") p = "/me.html";
     if (p === "/quest") p = "/quest.html";
+    if (/^\/v\/[0-9A-Za-z]{8}$/.test(p)) p = "/v.html";
     if (p === "/adv") { res.writeHead(301, { Location: "/quest" }); res.end(); return; } // v0.9 的舊網址（"adv" 會被廣告阻擋外掛擋掉）
     if (p === "/privacy" || p === "/terms") p += ".html";
     let base = CLIENT_DIR, rel = p;
@@ -144,7 +148,7 @@ function readJson(req, limit) {
   });
 }
 async function handleApi(req, res, pathname) {
-  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" || pathname === "/api/quest/clear" ? 512 * 1024 : 4096);
+  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" || pathname === "/api/quest/clear" || pathname === "/api/vlink" ? 512 * 1024 : 4096);
   if (body === "too-big") { res.writeHead(413, { Connection: "close" }); res.end(); res.on("finish", () => req.socket.destroy()); return; }
   if (!body || typeof body !== "object") return json(res, 400, { error: "格式不對" });
   const user = currentUser(req);
@@ -164,6 +168,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/run") { recordRun(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body, user);
+    if (pathname === "/api/vlink") { const r = createVlink(user, body, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf }); return r.error ? json(res, r.status, { error: r.error }) : json(res, 200, r); }
     const adv = { "/api/quest/clear": advClear, "/api/quest/buy": advBuy, "/api/quest/wear": advWear }[pathname];
     if (adv) { const r = adv(user, body); return r.error ? json(res, r.status || 400, { error: r.error }) : json(res, 200, r); }
     if (pathname === "/api/share") return handleShareCreate(res, body, user);

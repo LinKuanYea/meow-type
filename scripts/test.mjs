@@ -103,6 +103,16 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   }
   return { evs, t };
 }
+/* ---------- QR code ---------- */
+{
+  const { qrMatrix, qrSVG } = await import("../client/qr.js");
+  const M = qrMatrix("https://meow-type.otlab.org/v/Ab3dE9xY");
+  const finderOk = (x0, y0) => [0, 1, 2, 3, 4, 5, 6].every((i) => M[y0][x0 + i] && M[y0 + 6][x0 + i] && M[y0 + i][x0] && M[y0 + i][x0 + 6]) && !M[y0 + 1][x0 + 1] && M[y0 + 3][x0 + 3];
+  ok(M.length === 29 && finderOk(0, 0) && finderOk(M.length - 7, 0) && finderOk(0, M.length - 7), "QR code：大小與三個定位方塊（版本 3）");
+  ok(qrSVG("hi").startsWith("<svg") && qrMatrix("hi").length === 21, "QR code：SVG、短字串用版本 1");
+  let tooLong = false; try { qrMatrix("x".repeat(200)); } catch { tooLong = true; }
+  ok(tooLong, "QR code：太長會報錯");
+}
 /* ---------- 縮時影片的 MP4 封裝 ---------- */
 {
   const { muxMp4 } = await import("../client/mp4.js");
@@ -446,6 +456,19 @@ try {
   eq((await xAdvpost("/api/quest/clear", { level: "news-2099-01-01", rule: "back", events: nEv })).status, 400, "不存在的新聞不能打");
   const nBoard = await (await fetch(base + "/api/news/2026-11-27/board", { headers: XAV })).json();
   ok(nBoard.length === 1 && nBoard[0].me && nBoard[0].stars === 3, "每日新聞排行榜");
+  // 影片連結（電腦打完、手機掃 QR code 做影片）
+  ok(["/qr.js", "/vidui.js", "/v.js"].every(Boolean) && (await get("/qr.js")).status === 200 && (await get("/vidui.js")).status === 200 && (await get("/v.js")).status === 200, "影片連結的程式");
+  const vq = await (await xAdvpost("/api/vlink", { kind: "quest", level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, XAV)).json();
+  ok(vq.ok && /^[0-9A-Za-z]{8}$/.test(vq.id) && vq.days === 7, "冒險模式的影片連結");
+  const vqd = await (await get("/api/vlink/" + vq.id)).json();
+  ok(vqd.scene === "battle" && vqd.texts.length && vqd.boss.name && vqd.stars === 3 && vqd.outfit?.fur && vqd.events.length > 10, "影片連結的內容（題目、怪物、星星、裝扮）");
+  eq((await get("/v/" + vq.id)).status, 200, "手機上的影片頁");
+  const vp = await (await xAdvpost("/api/vlink", { kind: "practice", c: "cpp", l: "para", m: "full", rule: "back", specs: [spec], events: evs })).json();
+  const vpd = await (await get("/api/vlink/" + vp.id)).json();
+  ok(vp.ok && vpd.scene === "race" && vpd.texts[0] === text && vpd.nick === "" && vpd.outfit === null, "一般練習的影片連結（沒登入：沒有暱稱和裝扮）");
+  eq((await xAdvpost("/api/vlink", { kind: "practice", c: "cpp", l: "para", m: "full", rule: "back", specs: [spec], events: human([text], { gap: [3, 6], errRate: 0 }).evs })).status, 400, "可疑的打字不能做影片連結");
+  eq((await xAdvpost("/api/vlink", { kind: "practice", c: "cpp", l: "para", m: "full", rule: "back", specs: [{ c: "py", l: "para", i: [0] }], events: evs })).status, 400, "題目對不上不行");
+  eq((await get("/api/vlink/AAAAAAAA")).status, 404, "不存在的影片連結");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
   ok(!JSON.stringify(ex).includes("cat@example.com") && !JSON.stringify(ex).includes("g-123"), "匯出資料不含 email 與 Google 編號");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }

@@ -1,5 +1,6 @@
 // 冒險模式（伺服器）：過關驗算、星星、小魚乾、裝扮。進度只存登入的人；沒登入只回傳這次的星星。
 import { readFileSync, existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dbh, getSetting, setSetting } from "./stats.js";
 import { NEWS_ID, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
@@ -156,3 +157,47 @@ export function advWear(user, b) {
 }
 
 export const ITEM_COUNT = ITEMS.length;
+
+/* ---------- 影片連結：電腦上打完，掃 QR code 在手機上做影片（只存按鍵紀錄和題目，7 天後刪掉） ---------- */
+const B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const VLINK_DAYS = 7;
+export function initVlinks() {
+  dbh().exec("CREATE TABLE IF NOT EXISTS vlinks (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, user_id INTEGER, payload TEXT NOT NULL)");
+}
+export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf }) {
+  if (!RULES.includes(b.rule) || !Array.isArray(b.events)) return { status: 400, error: "格式不對" };
+  let p;
+  if (b.kind === "quest") {
+    const lv = levelOf(b.level);
+    if (!lv) return { status: 400, error: "找不到這一關" };
+    const r = replay({ texts: lv.texts, rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
+    if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
+    const title = lv.news ? `📰 ${lv.news.date.slice(5).replace("-", "/")} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
+    p = { scene: "battle", lang: lv.lang, texts: lv.texts, boss: lv.boss, big: !!lv.big, title, stars: starsOf(lv, r.sum), unit: "WPM" };
+  } else if (b.kind === "practice") {
+    if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m)) return { status: 400, error: "格式不對" };
+    const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];
+    if (!specs.length || (b.m === "full" && specs.length !== 1) || specs.some((x) => !x || x.c !== b.c || x.l !== b.l)) return { status: 400, error: "題目對不上" };
+    const texts = specs.map(textOf);
+    if (texts.some((t) => !t)) return { status: 400, error: "題目對不上" };
+    const limitMs = b.m === "t60" ? 60000 : null;
+    const r = replay({ texts, rule: b.rule, cat: b.c, events: b.events, limitMs });
+    if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
+    const sub = `${CAT_NAME[b.c]}・${LEN_NAME[b.l]}・${b.m === "t60" ? "1 分鐘" : "打完一題"}`;
+    p = { scene: "race", lang: b.c, texts, title: sub, sub, limitMs, unit: unitOf(b.c) };
+  } else return { status: 400, error: "格式不對" };
+  const st = user ? advState(user) : null;
+  const u = user ? dbh().prepare("SELECT nick, banned FROM users WHERE id=?").get(user.id) : null;
+  Object.assign(p, { rule: b.rule, events: b.events, nick: u && !u.banned ? u.nick || "" : "", outfit: st?.outfit || null });
+  const db = dbh(), now = Date.now();
+  db.prepare("DELETE FROM vlinks WHERE ts<?").run(now - VLINK_DAYS * 86400000);
+  let id;
+  do { id = Array.from(randomBytes(8), (x) => B62[x % 62]).join(""); } while (db.prepare("SELECT 1 FROM vlinks WHERE id=?").get(id));
+  db.prepare("INSERT INTO vlinks (id, ts, user_id, payload) VALUES (?,?,?,?)").run(id, now, user?.id ?? null, JSON.stringify(p));
+  return { ok: true, id, days: VLINK_DAYS };
+}
+export function getVlink(id) {
+  const r = /^[0-9A-Za-z]{8}$/.test(id || "") && dbh().prepare("SELECT ts, payload FROM vlinks WHERE id=?").get(id);
+  if (!r || r.ts < Date.now() - VLINK_DAYS * 86400000) return null;
+  return JSON.parse(r.payload);
+}

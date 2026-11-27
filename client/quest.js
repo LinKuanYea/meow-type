@@ -10,7 +10,7 @@ import { drawDressed } from "/cat.js";
 import { Battle } from "/battle.js";
 import { TypeBox } from "/typebox.js";
 import { learnCard } from "/learn.js";
-import { makeVideo, canMakeVideo } from "/video.js";
+import { videoPanel, canMakeVideo } from "/vidui.js";
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -242,25 +242,11 @@ function bindNewsQuiz(root) {
   }));
 }
 /* ---------- 縮時影片 ---------- */
-async function videoUI(lv, out) {
-  const box = $("#vid");
-  box.innerHTML = `<p><b>影片製作中…</b> <span id="vidPct">0%</span></p><progress id="vidBar" max="1" value="0"></progress>`;
+function videoUI(lv, out) {
   const title = lv.news ? `📰 ${fmtDate(lv.news.date)} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
-  let v;
-  try {
-    v = await makeVideo({ lv, rule: out.rule, events: out.events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: out.stars, unit: "WPM", title },
-      (p) => { const b = $("#vidBar"); if (b) { b.value = p; $("#vidPct").textContent = Math.round(p * 100) + "%"; } });
-  } catch (e) { box.innerHTML = `<p class="nickrule">做不出影片：${esc(e.message || String(e))}。換用電腦版 Chrome 試試看。</p>`; return; }
-  if (!document.body.contains(box)) return;
-  const url = URL.createObjectURL(v.blob), name = `meow-type-${lv.id}.${v.ext}`;
-  const file = new File([v.blob], name, { type: v.type });
-  const canShare = !!navigator.canShare?.({ files: [file] });
-  box.innerHTML = `<video src="${url}" controls playsinline muted loop autoplay></video>
-    <div class="vidbtns">${canShare ? '<button type="button" class="main" id="vShare">分享（選 Instagram → 限時動態）</button>' : ""}<a class="acctbtn" href="${url}" download="${name}">下載影片</a></div>
-    <p class="hint">${canShare ? "" : "電腦上沒有 IG 的話，下載後傳到手機再分享。"}${v.ext === "webm" ? "這個瀏覽器只能做 WebM 格式，IG 可能不收，建議用 Chrome 或 Safari。" : ""}</p>`;
-  $("#vShare")?.addEventListener("click", async () => {
-    try { await navigator.share({ files: [file], title: "喵打", text: "我在喵打打倒了" + lv.boss.name + "！你打得贏嗎？ https://meow-type.otlab.org/quest" }); }
-    catch (e) { if (e.name !== "AbortError") toast("分享不了，改用下載吧"); }
+  videoPanel($("#vid"), { scene: "battle", lang: lv.lang, texts: lv.texts, boss: lv.boss, big: lv.big, rule: out.rule, events: out.events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: out.stars, unit: "WPM", title }, {
+    link: { kind: "quest", level: lv.id, rule: out.rule, events: out.events }, toast, file: `meow-type-${lv.id}`,
+    shareText: `我在喵打打倒了${lv.boss.name}！你打得贏嗎？ https://meow-type.otlab.org/quest`,
   });
 }
 $("#back").onclick = () => { R = null; cancelAnimationFrame(raf); renderMap(); };

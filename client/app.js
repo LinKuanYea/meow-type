@@ -4,6 +4,7 @@ import { learnCard } from "/learn.js";
 import { ME, loadMe, onLogin, loginHint, nickField, bannedNote, askLogin } from "/account.js";
 import { catSVG, dressedSVG } from "/cat.js";
 import { TypeBox } from "/typebox.js";
+import { videoPanel, canMakeVideo } from "/vidui.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
 import { Typist, summarize, speedOf, unitOf } from "/shared/judge.js";
 import { analyze, tips, drillText, baseKey, show, esc, classify } from "/shared/analyze.js";
@@ -41,11 +42,13 @@ let R = null, raf = 0, lastSpec = null;
 const SV = [[catSVG(0, 0), catSVG(1, 0)], [catSVG(0, 1), catSVG(1, 1)]];
 const me = $("#me"), gh = $("#ghost");
 /** 登入的人：跑道上的貓穿上冒險模式的裝扮 */
+let OUTFIT = null;
 async function loadOutfit() {
   if (!ME.user) { SV[0] = [catSVG(0, 0), catSVG(1, 0)]; me.classList.remove("dressed"); me._f = -1; setCat(me, 0, 0); return; }
   try {
     const q = await (await fetch("/api/quest", { cache: "no-store" })).json();
     if (!q.outfit) return;
+    OUTFIT = q.outfit;
     SV[0] = [dressedSVG(0, q.outfit), dressedSVG(1, q.outfit)];
     me.classList.add("dressed"); me._f = -1; setCat(me, 0, 0);
   } catch {}
@@ -194,6 +197,7 @@ function finish(ms) {
    ${canBoard ? (NF1.banned ? bannedNote() : `<form class="submit" id="sub"><label for="nick"><b>上排行榜</b></label>${NF1.html}<button class="main" type="submit">送出成績</button><p id="subMsg">${CAT_NAME[S.cat]}・${LEN_NAME[S.len]}・${S.mode === "t60" ? "1 分鐘" : "打完一題"}，每人只留最好的一次。</p>${NF1.note}${loginHint()}</form>`)
       : !R.drill && online ? `<div class="submit"><p>正確率 90% 以上、打對 20 個字以上才能上排行榜。</p></div>` : ""}
    ${shareCard(!R.drill && online ? (A.acc >= 0.8 && A.correct >= 10 ? (NF2.banned ? { can: false, reason: "你的帳號已被停權，不能分享。有問題請找老師。" } : { can: true, field: NF2, hint: loginHint() }) : { can: false, reason: "正確率 80% 以上、打對 10 個字以上，就能產生挑戰連結分享給朋友。" }) : { can: false, reason: R.drill ? "弱點練習不能分享，打一般題目再來炫耀吧。" : "要連上伺服器才能分享。" })}
+   ${!R.drill && online && canMakeVideo() && A.acc >= 0.8 && A.correct >= 10 ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛打字的過程做成幾秒的直式影片，可以分享到 IG 限時動態。</span></div>` : ""}
    ${L ? L.html : ""}
    <div class="cols"><div><h3>建議</h3><ul class="tips">${T.map(([b, t]) => `<li><b>${b}</b>${t}</li>`).join("") || "<li><b>很穩</b>這次沒有明顯的問題。</li>"}</ul></div>
    <div><h3>錯誤分類</h3><div class="chips">${chip("全形半形", c.width.length)}${isCode() ? chip("縮排", c.indent.length) + chip("大小寫", c.kase.length) : ""}${S.cat === "cpp" ? chip("分號", c.semi.length) : ""}${isCode() ? chip("Enter", c.enter.length) : ""}${chip("其他", c.other.length)}</div>
@@ -204,6 +208,13 @@ function finish(ms) {
   $("#res").hidden = false;
   const won = R.rival && sp > R.rival.speed;
   if (R.rival?.share && !R.rival.reported) { R.rival.reported = true; post(`/api/share/${R.rival.share}/${won ? "win" : "lose"}`, {}); }
+  if ($("#bVid")) {
+    const vd = { c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice() };
+    $("#bVid").onclick = () => videoPanel($("#vid"), {
+      scene: "race", lang: vd.c, texts: vd.specs.map(textOf), rule: vd.rule, events: vd.events, limitMs: vd.m === "t60" ? 60000 : null,
+      outfit: OUTFIT, nick: ME.user?.nick || store.get("mt-nick", ""), unit: unitOf(vd.c), title: setName(vd.c, vd.l, vd.m), sub: setName(vd.c, vd.l, vd.m),
+    }, { link: { kind: "practice", ...vd }, toast, file: "meow-type", shareText: "我在喵打打了 " + Math.round(sp) + " " + unitOf(vd.c) + "！你打得贏嗎？ https://meow-type.otlab.org/" });
+  }
   bindShare($("#res"), {
     toast,
     create: (name) => { store.set("mt-nick", name); if (ME.user && !ME.user.nick) { ME.user.nick = name; syncNickFields(); } return post("/api/share", { cid: ensureCid(), name, c: S.cat, l: S.len, m: S.mode, rule: S.rule, specs: R.specs.slice(), events: R.ty.events.slice(), ms: Math.round(ms), speed: sp }); },
