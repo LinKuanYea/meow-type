@@ -1,7 +1,7 @@
 // 喵打：前端
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
-import { ME, loadMe, onLogin, loginHint, nickField, bannedNote } from "/account.js";
+import { ME, loadMe, onLogin, loginHint, nickField, bannedNote, askLogin } from "/account.js";
 import { catSVG } from "/cat.js";
 import { TypeBox } from "/typebox.js";
 import { shareCard, bindShare, drawResultImage, setText } from "/share.js";
@@ -336,9 +336,9 @@ $("#cYes").onclick = () => {
   consent = true; store.set(CONSENT_KEY, true); ensureCid();
   $("#consent").hidden = true; ta.focus();
   if (first) visit();
-  openChallenge();
+  openChallenge(); if (!shareId) askLogin();
 };
-$("#cNo").onclick = () => { consent = false; store.set(CONSENT_KEY, false); $("#consent").hidden = true; ta.focus(); openChallenge(); };
+$("#cNo").onclick = () => { consent = false; store.set(CONSENT_KEY, false); $("#consent").hidden = true; ta.focus(); openChallenge(); if (!shareId) askLogin(); };
 
 /* ---------- 打開別人分享的挑戰連結（/c/xxxxxxxx） ---------- */
 const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(location.pathname)?.[1] || "";
@@ -387,7 +387,7 @@ setInterval(checkVersion, 60000);
 
 /* ---------- 開始 ---------- */
 syncSeg(); syncUnit(); newRun(); loadBoard();
-loadMe().then(loadBoard);
+loadMe().then(() => { loadBoard(); if (consent !== null && !shareId) askLogin(); });
 // 登入或登出後：排行榜的「你」要重新判斷，結算畫面的登入提示拿掉、暱稱帶入
 onLogin(() => {
   loadBoard();

@@ -39,7 +39,7 @@ button:focus-visible{outline:3px solid var(--gin);outline-offset:2px}
 .live strong{font:400 28px/1.15 "DotGothic16",monospace;white-space:nowrap}
 .box{position:relative;background:var(--card);border:2px solid var(--line);border-radius:14px;padding:22px 22px 18px;cursor:text;user-select:none;-webkit-user-select:none}
 .box.on{border-color:var(--gin)}
-#txt{font:20px/1.75 "JetBrains Mono","Noto Sans TC",monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding-top:6px}
+#txt{font:20px/1.75 "JetBrains Mono","Noto Sans TC",monospace;white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto;padding-top:6px;font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
 #txt.zh{font:24px/1.9 "Noto Sans TC",sans-serif;letter-spacing:.06em}
 #txt span{position:relative;color:var(--todo)}
 #txt .ok{color:var(--ink)}
@@ -250,3 +250,6 @@ table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{bor
 .item button:disabled{opacity:.5;cursor:not-allowed}
 .item .on{font-size:13px;color:var(--gin);font-weight:700}
 @media (max-width:640px){.closet{grid-template-columns:1fr}.preview{position:static}}
+/* 程式碼不要連字（JetBrains Mono 會把 <= 顯示成 ≤，學生會以為要打 ≤） */
+code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"calt" 0}
+.panel a{color:var(--gin)}

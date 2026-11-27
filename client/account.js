@@ -59,3 +59,27 @@ export function loginHint() {
   return `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>（選填）：登入後可以在「我的紀錄」看到自己的練習歷史，排行榜上會標 ✓。登入會存 Google 帳號編號和 email，不存姓名，紀錄只有你自己看得到。</p>`;
 }
 document.addEventListener("click", (e) => { if (e.target.closest(".dologin")) login(); });
+
+/* ---------- 沒登入時提示登入（可以選「不登入繼續」，7 天內不再問） ---------- */
+const SKIP_KEY = "mt-login-skip", SKIP_MS = 7 * 86400000;
+export function askLogin(extra = "") {
+  if (!ME.enabled || ME.user || document.querySelector("#askLogin")) return;
+  let t = 0; try { t = Number(localStorage.getItem(SKIP_KEY)) || 0; } catch {}
+  if (Date.now() - t < SKIP_MS) return;
+  const ov = document.createElement("div");
+  ov.className = "ov"; ov.id = "askLogin";
+  ov.innerHTML = `<div class="panel" role="dialog" aria-modal="true" aria-labelledby="askT">
+    <h2 id="askT">要不要用 Google 登入？</h2>
+    <p>登入之後：</p>
+    <ul><li>冒險模式的進度、小魚乾和裝扮會存在你的帳號，換電腦也還在${extra}</li>
+      <li>「我的紀錄」看得到自己的練習歷史</li><li>排行榜上會標 ✓</li></ul>
+    <p class="hint">登入只存 Google 帳號編號和 email，不存姓名；紀錄只有你自己看得到。詳見<a href="/privacy" target="_blank" rel="noopener">隱私權政策</a>。</p>
+    <div class="btns"><button class="main" type="button" id="askYes">用 Google 登入</button><button type="button" id="askNo">不登入繼續</button></div></div>`;
+  document.body.append(ov);
+  const close = (skip) => { if (skip) { try { localStorage.setItem(SKIP_KEY, String(Date.now())); } catch {} } ov.remove(); };
+  ov.querySelector("#askYes").onclick = () => { close(false); login(); };
+  ov.querySelector("#askNo").onclick = () => close(true);
+  ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(true); });
+  ov.querySelector("#askYes").focus();
+}
+onLogin(() => document.querySelector("#askLogin")?.remove());

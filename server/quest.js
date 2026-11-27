@@ -1,5 +1,8 @@
 // 冒險模式（伺服器）：過關驗算、星星、小魚乾、裝扮。進度只存登入的人；沒登入只回傳這次的星星。
-import { dbh } from "./stats.js";
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dbh, getSetting, setSetting } from "./stats.js";
+import { NEWS_ID, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
 import { RULES, replay } from "../shared/judge.js";
 import { LEVELS, starsOf, fishFor, unlocked, FISH } from "../shared/quest.js";
 import { ITEM, ITEMS, SLOTS, cleanOutfit } from "../shared/items.js";
@@ -16,6 +19,49 @@ export function initAdventure() {
   if (!has("fish")) dbh().exec("ALTER TABLE users ADD COLUMN fish INTEGER NOT NULL DEFAULT 0");
   if (!has("outfit")) dbh().exec("ALTER TABLE users ADD COLUMN outfit TEXT");
 }
+
+/* ---------- 每日新聞 ---------- */
+const NEWS_DIR = fileURLToPath(new URL("../shared/news/", import.meta.url));
+const newsCache = new Map();
+export const newsHidden = () => new Set(String(getSetting("news_hidden") || "").split(",").filter(Boolean));
+export function setNewsHidden(date, hide) {
+  const h = newsHidden(); if (hide) h.add(date); else h.delete(date);
+  setSetting("news_hidden", [...h].sort().join(","));
+}
+/** 讀一天的新聞；未來的日期、被管理員下架的、不存在的都回傳 null（admin＝管理頁要看全部） */
+export function getNews(date, admin = false) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return null;
+  if (!admin && (date > twDate() || newsHidden().has(date))) return null;
+  if (!newsCache.has(date)) {
+    const f = NEWS_DIR + date + ".json";
+    newsCache.set(date, existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : null);
+  }
+  return newsCache.get(date);
+}
+export function newsIndex(admin = false) {
+  let all = [];
+  try { all = JSON.parse(readFileSync(NEWS_DIR + "index.json", "utf8")); } catch {}
+  const today = twDate(), hid = newsHidden();
+  return admin ? all.map((n) => ({ ...n, hidden: hid.has(n.date) })) : all.filter((n) => n.date <= today && !hid.has(n.date));
+}
+/** 在新聞當天就過關的日期（算連續天數用） */
+function onTimeDates(uid) {
+  return dbh().prepare("SELECT level, first_ts FROM adv WHERE user_id=? AND level LIKE 'news-%'").all(uid)
+    .map((r) => [r.level.slice(5), twDate(r.first_ts)]).filter(([d, t]) => d === t).map(([d]) => d);
+}
+export function newsOverview(user) {
+  const today = twDate(), list = newsIndex().slice(0, 60);
+  const stars = user ? starMap(user.id) : {};
+  return { today, streak: user ? streakOf(onTimeDates(user.id), today) : 0, list: list.map((n) => ({ ...n, stars: stars["news-" + n.date] || 0 })) };
+}
+/** 某一天新聞的排行榜（登入的人，每人最好的一次） */
+export function newsBoard(date, user) {
+  if (!getNews(date)) return null;
+  return dbh().prepare(`SELECT u.id, COALESCE(u.nick, '（還沒取暱稱）') name, a.speed, a.acc, a.stars FROM adv a JOIN users u ON u.id = a.user_id
+    WHERE a.level=? AND a.stars>0 AND u.banned=0 ORDER BY a.speed DESC LIMIT 20`).all("news-" + date)
+    .map((r) => ({ name: r.name, speed: r.speed, acc: r.acc, stars: r.stars, me: user?.id === r.id }));
+}
+const levelOf = (id) => { const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? newsLevel(n) : null; };
 
 const owned = (uid) => new Set(dbh().prepare("SELECT item FROM items WHERE user_id=?").all(uid).map((r) => r.item));
 const starMap = (uid) => Object.fromEntries(dbh().prepare("SELECT level, stars FROM adv WHERE user_id=?").all(uid).map((r) => [r.level, r.stars]));
@@ -40,7 +86,7 @@ export function advState(user) {
 
 /** 過關：重播按鍵紀錄算出星星；登入的人記進度、發小魚乾和掉落的裝扮 */
 export function advClear(user, b) {
-  const lv = LEVELS.get(b.level);
+  const lv = levelOf(b.level);
   if (!lv || !RULES.includes(b.rule)) return { status: 400, error: "格式不對" };
   if (lv.login && !user) return { status: 401, error: "這一章要登入才能玩" };
   const db = dbh();
@@ -56,7 +102,12 @@ export function advClear(user, b) {
   if (!flag) {
     // 今天已經拿過幾次「重打」的小魚乾（重打的獎勵固定是 FISH.replay 條，跟星星的 10 的倍數分得開）
     const repToday = db.prepare("SELECT COUNT(*) n FROM adv_runs WHERE user_id=? AND ts>=? AND flag='' AND fish=?").get(user.id, todayStart(), FISH.replay).n;
-    out.fish = fishFor(lv, prev, stars, repToday);
+    if (lv.news) {
+      const today = twDate(now), isToday = lv.news.date === today;
+      const streak = streakOf([...onTimeDates(user.id), ...(isToday && stars > 0 ? [today] : [])], today);
+      out.fish = newsFishFor(isToday, prev, stars, repToday, streak, FISH.replay, FISH.replayPerDay);
+      out.streak = streak;
+    } else out.fish = fishFor(lv, prev, stars, repToday);
     if (stars > 0) {
       db.prepare(`INSERT INTO adv (user_id, level, stars, speed, acc, clears, first_ts, last_ts) VALUES (?,?,?,?,?,1,?,?)
         ON CONFLICT(user_id, level) DO UPDATE SET stars=MAX(stars, excluded.stars), speed=MAX(COALESCE(speed,0), excluded.speed), acc=MAX(COALESCE(acc,0), excluded.acc), clears=clears+1, last_ts=excluded.last_ts`)
