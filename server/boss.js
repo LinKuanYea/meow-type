@@ -13,6 +13,8 @@ import { DEN_ITEM } from "../shared/den.js";
 
 const DAY = 86400000, TZ = 8 * 3600000;
 const todayStart = (now) => { const n = now + TZ; return n - (n % DAY) - TZ; };
+/** 跨週：週日晚上開始打、過了週一 00:00 才送出，算在開始的那一週（送出要在換週後 GRACE 內） */
+export const GRACE = 15 * 60000;
 
 export function initBoss() {
   dbh().exec(`
@@ -104,6 +106,7 @@ export function bossState(user, now = Date.now()) {
     top: ranking(row.week, 10).map((r) => ({ name: r.name, dmg: r.dmg, n: r.n, me: user?.id === r.id })),
     recent: recent(row.week).map((r) => ({ name: r.name, dmg: r.dmg, ts: r.ts })),
   };
+  if (user?.banned) out.banned = true;
   if (user) {
     const m = db.prepare("SELECT COALESCE(SUM(dmg),0) dmg, COUNT(*) n FROM boss_hits WHERE week=? AND user_id=? AND counted=1").get(row.week, user.id);
     const today = db.prepare("SELECT COUNT(*) n FROM boss_hits WHERE user_id=? AND ts>=? AND counted=1").get(user.id, todayStart(now)).n;
@@ -120,25 +123,36 @@ export function bossState(user, now = Date.now()) {
 /** 出擊：重播按鍵紀錄算傷害。b ＝ { piece, rule, events } */
 export function bossHit(user, b, now = Date.now()) {
   if (!user) return { status: 401, error: "要先登入才能打世界 Boss" };
+  if (user.banned) return { status: 403, error: "帳號停權中，不能打世界 Boss" };
   if (!b || b.rule !== RULE || typeof b.piece !== "string") return { status: 400, error: "格式不對" };
-  const row = weekRow(now), p = pieceOf(row.info.theme, b.piece);
-  if (!p) return { status: 400, error: "這週換了新的 Boss（或題目對不上），重新出擊吧" };
-  const r = replay({ texts: p.texts, rule: b.rule, cat: p.lang, events: b.events, limitMs: null });
+  // 出擊開始時的那一週（b.week：前端開始打的時候看到的週次）。只有剛換週、而且真的是換週前就開始打的，才算到上一週
+  let row = weekRow(now), at = now, p = null, r = null;
+  if (typeof b.week === "string" && b.week !== row.week && now - row.w.start <= GRACE) {
+    const prev = weekRow(now - GRACE), pp = prev.week === b.week && pieceOf(prev.info.theme, b.piece);
+    const rr = pp && replay({ texts: pp.texts, rule: b.rule, cat: pp.lang, events: b.events, limitMs: null });
+    const began = rr?.ok ? now - rr.sum.ms - 2000 : Infinity; // 第一個字之前還有讀題的時間，多抓 2 秒
+    if (began < row.w.start) { row = prev; at = began; p = pp; r = rr; }
+  }
+  if (!p) {
+    p = pieceOf(row.info.theme, b.piece);
+    if (!p) return { status: 400, error: "這週換了新的 Boss（或題目對不上），重新出擊吧" };
+    r = replay({ texts: p.texts, rule: b.rule, cat: p.lang, events: b.events, limitMs: null });
+  }
   if (!r.ok) return { status: 400, error: "成績驗算沒過：" + r.reason };
   const db = dbh(), sum = r.sum, flag = r.flags.join(",");
-  const today = db.prepare("SELECT COUNT(*) n FROM boss_hits WHERE user_id=? AND ts>=? AND counted=1").get(user.id, todayStart(now)).n;
+  const today = db.prepare("SELECT COUNT(*) n FROM boss_hits WHERE user_id=? AND ts>=? AND ts<? AND counted=1").get(user.id, todayStart(at), todayStart(at) + DAY).n; // 每天的次數也算在開始的那天
   const raw = flag ? 0 : damageOf(sum);
   const counted = !flag && today < DAILY_CAP ? 1 : 0;
   const dmg = counted && !row.defeated_ts ? Math.min(raw, Math.max(0, row.hp - dealt(row.week))) : 0; // 最後一擊只扣到 0
   const fish = counted ? BOSS_FISH.hit : 0;
   db.prepare("INSERT INTO boss_hits (ts, week, user_id, piece, correct, acc, speed, ms, raw, dmg, counted, fish, flag) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(now, row.week, user.id, p.id, sum.correct, sum.acc, sum.speed, Math.round(sum.ms), raw, dmg, counted, fish, flag);
+    .run(at, row.week, user.id, p.id, sum.correct, sum.acc, sum.speed, Math.round(sum.ms), raw, dmg, counted, fish, flag);
   if (fish) db.prepare("UPDATE users SET fish=fish+? WHERE id=?").run(fish, user.id);
   if (flag) console.warn(`[世界 Boss] 可疑（${flag}）：${p.id} ${sum.speed.toFixed(1)}`);
   const wasDead = !!row.defeated_ts, killed = !wasDead && settle(row, now);
   return {
     ok: true, piece: p.id, raw, dmg, bonus: accBonus(sum.acc), counted: !!counted, flagged: !!flag, over: !flag && !counted, late: wasDead && !!counted,
-    killed, fish, speed: sum.speed, acc: sum.acc, correct: sum.correct, ms: Math.round(sum.ms), today: today + counted, cap: DAILY_CAP,
+    lastWeek: row.week !== weekOf(now).key ? row.week : undefined, killed, fish, speed: sum.speed, acc: sum.acc, correct: sum.correct, ms: Math.round(sum.ms), today: today + counted, cap: DAILY_CAP,
     total: db.prepare("SELECT fish FROM users WHERE id=?").get(user.id).fish, state: bossState(user, now),
   };
 }
@@ -152,7 +166,8 @@ export function bossSeen(user, b) {
 
 /** 影片連結用：這週的一段文字和 Boss（驗算在 createVlink 做） */
 export function bossPiece(id, now = Date.now()) {
-  const row = weekRow(now), p = pieceOf(row.info.theme, id);
+  let row = weekRow(now), p = pieceOf(row.info.theme, id);
+  if (!p && now - row.w.start <= GRACE) { row = weekRow(now - GRACE); p = pieceOf(row.info.theme, id); } // 剛換週：上一週那段的影片
   return p ? { piece: p, boss: { name: row.info.name, glyph: row.info.glyph, color: row.info.color, art: BOSS_ART } } : null;
 }
 

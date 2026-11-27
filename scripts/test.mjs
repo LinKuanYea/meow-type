@@ -251,6 +251,37 @@ for (const c of ["en", "zh"]) for (const l of LENS) for (let n = 0; n < 50; n++)
   eq(cleanCustom({ title: "x", lang: "zh", text: "床前明月光，\n疑是地上霜。", target: "30" }).texts.length, 2, "自訂題組：中文每行一段");
 }
 
+/* ---------- 世界 Boss：跨週、停權（直接呼叫伺服器函式，用假的時間） ---------- */
+{
+  const bdir = mkdtempSync(path.join(tmpdir(), "meow-boss-unit-"));
+  const st = await import("../server/stats.js");
+  st.initStats(path.join(bdir, "b.db"));
+  (await import("../server/quest.js")).initAdventure();
+  const bs = await import("../server/boss.js");
+  bs.initBoss();
+  const db = st.dbh();
+  db.prepare("INSERT INTO users (id, sub, created, last_login) VALUES (1, 'u1', 0, 0), (2, 'u2', 0, 0)").run();
+  const U = { id: 1, banned: 0 }, BAN = { id: 2, banned: 1 };
+  const w0 = weekOf(Date.parse("2026-12-06T12:00:00+08:00")), w1 = weekOf(w0.end + 1000); // 週日、下一週
+  const prevPiece = randomPiece(bossOfIndex(w0.index).theme);
+  const ev = human(prevPiece.texts, { seed: 11, gap: [60, 120], errRate: 0 }).evs;
+  const dur = ev[ev.length - 1][0] - ev[0][0];
+  // 換週前 1 秒還在打、換週後 (打字時間) 送出：算在上一週
+  const hit = bs.bossHit(U, { piece: prevPiece.id, week: w0.key, rule: "back", events: ev }, w1.start + Math.max(0, dur - 60000));
+  ok(hit.ok && hit.lastWeek === w0.key && hit.dmg > 0, "跨週：換週前開始打的，算在上一週 " + JSON.stringify({ ok: hit.ok, lastWeek: hit.lastWeek, dmg: hit.dmg, error: hit.error }));
+  eq(db.prepare("SELECT week FROM boss_hits ORDER BY id DESC LIMIT 1").get().week, w0.key, "跨週：記在上一週的血條");
+  // 換週後才開始打的（打字時間比換週後經過的時間短）：不能算上一週
+  const late = bs.bossHit(U, { piece: prevPiece.id, week: w0.key, rule: "back", events: ev }, w1.start + dur + 60000);
+  ok(late.status === 400 || (late.ok && !late.lastWeek), "跨週：換週後才開始打的不能算上一週");
+  // 超過寬限時間
+  const tooLate = bs.bossHit(U, { piece: prevPiece.id, week: w0.key, rule: "back", events: ev }, w1.start + bs.GRACE + 60000);
+  ok(tooLate.status === 400 || (tooLate.ok && !tooLate.lastWeek), "跨週：換週超過 15 分鐘就不算上一週");
+  // 停權
+  const bh = bs.bossHit(BAN, { piece: prevPiece.id, week: w0.key, rule: "back", events: ev }, w0.start + 3600000);
+  ok(bh.status === 403 && bs.bossState(BAN, w0.start + 3600000).banned, "停權的人不能打世界 Boss");
+  rmSync(bdir, { recursive: true, force: true });
+}
+
 /* ---------- 伺服器 API ---------- */
 const dir = mkdtempSync(path.join(tmpdir(), "meow-type-test-"));
 // 測試用的新聞：正式的新聞加上「今天」的 3 篇短文

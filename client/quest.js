@@ -196,7 +196,7 @@ function bossLive() {
   const me = r.me;
   $("#wbMe").innerHTML = !r.login ? `<p>登入後就能出擊，一起打倒${esc(r.boss.name)}！</p><button type="button" class="main dologin">用 Google 登入</button>`
     : `<div class="big"><div><small>我的傷害</small><strong>${me.dmg}</strong></div><div class="s"><small>名次</small><strong>${me.rank ? `第 ${me.rank} 名` : "—"}</strong></div><div class="s"><small>今天算傷害的次數</small><strong>${me.today} / ${r.cap}</strong></div></div>
-      ${r.defeated ? `<p class="hint">這週的 Boss 已經倒下了，下週一再來！</p>` : `<button type="button" class="main" id="wbGo">⚔️ 出擊！</button><p class="hint">${me.today >= r.cap ? `今天的 ${r.cap} 次已經用完了：還可以打，但不會扣血、沒有小魚乾，明天再來。` : `每次打一段 ${esc(r.boss.themeName)}（從題庫隨機抽），打完就攻擊。`}</p>`}`;
+      ${r.banned ? `<p class="hint">帳號停權中，不能打世界 Boss。</p>` : r.defeated ? `<p class="hint">這週的 Boss 已經倒下了，下週一再來！</p>` : `<button type="button" class="main" id="wbGo">⚔️ 出擊！</button><p class="hint">${me.today >= r.cap ? `今天的 ${r.cap} 次已經用完了：還可以打，但不會扣血、沒有小魚乾，明天再來。` : `每次打一段 ${esc(r.boss.themeName)}（從題庫隨機抽），打完就攻擊。`}</p>`}`;
   $("#wbTop").innerHTML = r.top.length ? `<table class="lb"><tbody>${r.top.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}${x.me ? "（你）" : ""}</td><td class="n">${x.dmg}</td></tr>`).join("")}</tbody></table>` : '<p class="empty">還沒有人出擊，搶第一個！</p>';
   $("#wbFeed").innerHTML = r.recent.length ? r.recent.map((x) => `<li><b>${esc(x.name)}</b> 造成 <b>${x.dmg}</b> 傷害<span class="hint">　${agoTxt(r.now - x.ts)}</span></li>`).join("") : '<li class="empty">還沒有攻擊紀錄</li>';
 }
@@ -209,14 +209,14 @@ async function bossSeen() {
 function playBoss() {
   if (!ST.login) return login();
   const r = WB, p = randomPiece(r.boss.theme, wbLast); wbLast = p.id;
-  play({ id: "world-boss", world: { piece: p.id, hp: r.hp, left: r.left }, name: r.boss.name, lang: p.lang, texts: p.texts, segs: [p.texts], chars: p.chars, from: p.from,
+  play({ id: "world-boss", world: { piece: p.id, week: r.week, hp: r.hp, left: r.left }, name: r.boss.name, lang: p.lang, texts: p.texts, segs: [p.texts], chars: p.chars, from: p.from,
     boss: { name: r.boss.name, glyph: r.boss.glyph, color: r.boss.color, art: r.boss.art }, big: true, target: 0, chapter: "boss", index: 0 }, 0);
 }
 async function bossFinish(lv, sum) {
   const run = R; run.waiting = true;
   $("#res").innerHTML = `<div class="res"><h2>結算中…</h2></div>`; $("#res").hidden = false;
   const events = R.ty.events.slice(), rule = R.rule;
-  const o = online ? await api("/api/boss/hit", { piece: lv.world.piece, rule, events }) : { error: "要連上伺服器" };
+  const o = online ? await api("/api/boss/hit", { piece: lv.world.piece, week: lv.world.week, rule, events }) : { error: "要連上伺服器" };
   run.waiting = false;
   if (!o.error) {
     ST.fish = o.total; $("#fish").textContent = `🐟 ${ST.fish}`;
@@ -229,7 +229,7 @@ async function bossFinish(lv, sum) {
   const why = o.error ? "" : o.flagged ? "這次的打字節奏不太像人打的，不算傷害。"
     : o.over ? `今天已經出擊 ${o.cap} 次了，這次不扣血（本來可以造成 ${o.raw} 傷害），明天再來！`
     : o.late ? "Boss 已經被別人打倒了，這次沒有傷害，小魚乾照拿。"
-    : `打對 ${o.correct} 個字 × 正確率加成 ${o.bonus}${o.dmg < o.raw ? `（最後一擊只需要 ${o.dmg}）` : ""}`;
+    : `打對 ${o.correct} 個字 × 正確率加成 ${o.bonus}${o.dmg < o.raw ? `（最後一擊只需要 ${o.dmg}）` : ""}${o.lastWeek ? "。你在換週前就開始打了，這次算在上週的 Boss。" : ""}`;
   $("#res").innerHTML = `<div class="res questres">
     <h2>${o.error ? "這次沒有送出" : o.killed ? `🎉 最後一擊！打倒${esc(lv.name)}！` : o.dmg ? `對${esc(lv.name)}造成 ${o.dmg} 傷害！` : `${esc(lv.name)}沒有受傷…`}</h2>
     <p>${esc(why)}</p>
