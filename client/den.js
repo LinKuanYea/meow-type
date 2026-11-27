@@ -4,7 +4,7 @@ import { ROOM, PX, DEN, DEN_ITEM, artH, layoutError } from "/shared/den.js";
 import { ISLANDS, LEVELS, learnItem } from "/shared/quest.js";
 import { DEFAULT_OUTFIT } from "/shared/items.js";
 import { esc } from "/shared/analyze.js";
-import { drawDressed } from "/cat.js";
+import { Cats } from "/den-cats.js";
 
 const K = 12; // canvas 上每個像素畫成 K × K（CSS 再縮放）
 const AW = ROOM.w * PX, AH = ROOM.h * PX; // 房間的像素大小（96 × 64）
@@ -18,7 +18,7 @@ let focus = null; // 右邊面板正在看的家具 id
 let hold = null; // 正在移動的家具：{ id, from: { x, y } | null }
 let hover = null; // 滑鼠在房間的哪個像素：{ ax, ay }
 let openChap = null; // 書櫃裡打開的章
-let raf = 0, last = 0, cat = null, saving = Promise.resolve();
+let raf = 0, last = 0, saving = Promise.resolve();
 let sprites = new Map(), bg = null;
 
 /* ---------- 開啟貓窩 ---------- */
@@ -32,14 +32,14 @@ export async function openDen(ctx) {
   if (D.login) setFish(D.fish);
   focus = null; hold = null; openChap = null;
   refresh();
-  cat = newCat();
+  cats.reset(D.cats || ["fur-orange"], C.ST.outfit || DEFAULT_OUTFIT, reduce());
   start();
 }
 
 function build() {
   $("#denBody").innerHTML = `<p class="hint" id="denHint"></p>
     <div class="denwrap">
-      <div class="denstage"><canvas id="denCv" width="${AW * K}" height="${AH * K}" role="img" aria-label="你的貓窩：房間裡的家具列在右邊和下面"></canvas>
+      <div class="denstage"><canvas id="denCv" width="${AW * K}" height="${AH * K}" tabindex="0" role="img" aria-label="你的貓窩：房間裡的家具列在右邊和下面。選到房間時，方向鍵可以讓你的貓走一格"></canvas>
         <p class="denstat"><span id="denTip"></span><span id="denSave" role="status"></span></p></div>
       <div class="denside" id="denSide" aria-live="polite"></div>
     </div>
@@ -48,6 +48,12 @@ function build() {
   cv.addEventListener("pointermove", (e) => { hover = toArt(e); if (hold) draw(); });
   cv.addEventListener("pointerleave", () => { hover = null; if (hold) draw(); });
   cv.addEventListener("click", (e) => clickRoom(toArt(e)));
+  cv.addEventListener("keydown", (e) => {
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (!d || hold) return;
+    e.preventDefault();
+    if (cats.step(...d) && reduce()) draw();
+  });
   $("#denList").addEventListener("click", onButton);
   $("#denSide").addEventListener("click", onButton);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && hold && !$("#den").hidden) cancelHold(); });
@@ -62,7 +68,7 @@ const available = (it) => (it.learn ? D.unlocked.includes(it.id) : D.owned.inclu
 /** 狀態改變後：重做圖片快取、重畫清單和面板 */
 function refresh() {
   sprites = new Map();
-  renderHint(); renderList(); renderSide(); fixCat(); draw();
+  renderHint(); renderList(); renderSide(); cats.fix(); draw();
 }
 function renderHint() {
   $("#denHint").innerHTML = D.login
@@ -208,7 +214,6 @@ function spotAt(it, p) {
   return { x, y };
 }
 function clickRoom(p) {
-  if (!D.login) return;
   if (hold) {
     const it = DEN_ITEM.get(hold.id), s = spotAt(it, p), next = [...D.layout, { id: it.id, ...s }];
     const err = layoutError(next, have());
@@ -217,9 +222,13 @@ function clickRoom(p) {
     refresh(); return save();
   }
   const hit = hitTest(p);
+  if (!hit) { // 空的地板：主貓走過去
+    const tx = Math.floor(p.ax / PX), ty = Math.floor(p.ay / PX);
+    if (ty >= ROOM.wall && cats.commandTile(tx, ty) && reduce()) draw();
+  } else if (cats.commandUse(hit.id) && reduce()) draw();
+  if (!D.login) return;
   focus = hit ? hit.id : null; openChap = null;
   renderSide();
-  if (hit && DEN_ITEM.get(hit.id).sit) goSit(hit.id);
 }
 /** 點到哪件家具（看圖上不透明的像素，畫在上面的先算） */
 function hitTest(p) {
@@ -299,74 +308,9 @@ function background() {
   return cv;
 }
 
-/* ---------- 貓 ---------- */
-const CAT_SPEED = 12; // 每秒幾個像素
-function newCat() {
-  const k = { x: AW / 2, y: AH - 8, mode: "idle", until: performance.now() + 1500, face: 1, perch: null, plan: null, t0: 0 };
-  if (reduce()) { const s = D.layout.find((e) => DEN_ITEM.get(e.id).sit); if (s) Object.assign(k, perchPt(s), { mode: "perch", perch: s.id, until: Infinity }); }
-  return k;
-}
-function perchPt(e) { const it = DEN_ITEM.get(e.id); return { x: e.x * PX + it.sit[0], y: (e.y + DEN_ITEM.get(e.id).h - artH(it)) * PX + it.sit[1] }; }
-function frontPt(e) { const it = DEN_ITEM.get(e.id); return { x: e.x * PX + it.sit[0], y: Math.min(AH - 1, (e.y + it.h) * PX + 3) }; }
-/** 家具被搬走時，坐在上面的貓跳回地板 */
-function fixCat() {
-  if (!cat) return;
-  if (cat.perch && !placed(cat.perch)) Object.assign(cat, { mode: "idle", perch: null, plan: null, y: AH - 8, until: performance.now() + 800 });
-  if (cat.plan && !placed(cat.plan)) cat.plan = null;
-}
-function goSit(id) {
-  if (reduce() || !cat || cat.perch === id) return;
-  const e = placed(id); if (!e) return;
-  if (cat.perch) Object.assign(cat, { mode: "jump", from: { x: cat.x, y: cat.y }, to: frontPt(placed(cat.perch)), t0: performance.now(), perch: null });
-  walkTo(frontPt(e), id);
-}
-function walkTo(p, plan) {
-  if (cat.mode === "jump") { cat.next = { p, plan }; return; }
-  Object.assign(cat, { mode: "walk", tx: p.x, ty: p.y, plan: plan || null });
-}
-function randomFloor() { return { x: 8 + Math.random() * (AW - 16), y: FLOOR_Y + 12 + Math.random() * (AH - FLOOR_Y - 13) }; }
-function update(t, dt) {
-  if (!cat || reduce()) return;
-  if (cat.mode === "idle" && t > cat.until) {
-    const sits = D.layout.filter((e) => DEN_ITEM.get(e.id).sit);
-    if (sits.length && Math.random() < 0.45) { const e = sits[Math.floor(Math.random() * sits.length)]; walkTo(frontPt(e), e.id); }
-    else walkTo(randomFloor());
-  } else if (cat.mode === "walk") {
-    const dx = cat.tx - cat.x, dy = cat.ty - cat.y, d = Math.hypot(dx, dy), step = CAT_SPEED * dt;
-    if (Math.abs(dx) > 0.5) cat.face = dx < 0 ? -1 : 1;
-    if (d <= step) {
-      cat.x = cat.tx; cat.y = cat.ty;
-      const e = cat.plan && placed(cat.plan);
-      if (e) Object.assign(cat, { mode: "jump", from: { x: cat.x, y: cat.y }, to: perchPt(e), t0: t, perch: e.id, plan: null });
-      else Object.assign(cat, { mode: "idle", until: t + 2000 + Math.random() * 3000 });
-    } else { cat.x += (dx / d) * step; cat.y += (dy / d) * step; }
-  } else if (cat.mode === "jump") {
-    if (t - cat.t0 > 450) {
-      Object.assign(cat, cat.to);
-      if (cat.next) { const n = cat.next; cat.next = null; cat.mode = "idle"; walkTo(n.p, n.plan); }
-      else if (cat.perch) Object.assign(cat, { mode: "perch", until: t + 5000 + Math.random() * 5000, since: t });
-      else Object.assign(cat, { mode: "idle", until: t + 1500 });
-    }
-  } else if (cat.mode === "perch" && t > cat.until) {
-    const e = placed(cat.perch);
-    Object.assign(cat, { mode: "jump", from: { x: cat.x, y: cat.y }, to: e ? frontPt(e) : { x: cat.x, y: AH - 8 }, t0: t, perch: null });
-  }
-}
-/** 貓現在畫在哪裡（腳的位置） */
-function catPos(t) {
-  if (cat.mode !== "jump") return { x: cat.x, y: cat.y };
-  const a = Math.min(1, (t - cat.t0) / 450);
-  return { x: cat.from.x + (cat.to.x - cat.from.x) * a, y: cat.from.y + (cat.to.y - cat.from.y) * a - Math.sin(a * Math.PI) * 10 };
-}
-const Z = ["kkkk", "..k.", ".k..", "kkkk"];
-function drawCat(c, t) {
-  const p = catPos(t), walking = cat.mode === "walk", f = walking ? Math.floor(t / 200) % 2 : 0;
-  drawDressed(c, Math.round(p.x - 8) * K, Math.round(p.y - 14) * K, K, f, C.ST.outfit || DEFAULT_OUTFIT, { flip: cat.face < 0 });
-  if (cat.mode === "perch" && t - cat.since > 2500 && !reduce()) { // 睡著了
-    const k = Math.floor((t - cat.since) / 700) % 3;
-    for (let n = 0; n <= k; n++) Z.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") { c.fillStyle = "#6b5a8e"; c.fillRect((p.x + 6 + n * 4 + i) * K, (p.y - 16 - n * 5 + j) * K, K, K); } }));
-  }
-}
+/* ---------- 貓（client/den-cats.js） ---------- */
+const cats = new Cats(() => D.layout, (e, row) => drawItem($("#denCv").getContext("2d"), e, 1, row));
+const zOf = (id) => { const e = placed(id), it = e && DEN_ITEM.get(e.id); return e ? (e.y + it.h) * PX - 0.5 : 0; };
 
 /* ---------- 畫房間 ---------- */
 /** 要畫的東西，照前後排好：牆上的、地毯，然後地板家具和貓依腳的位置 */
@@ -378,10 +322,7 @@ function drawOrder() {
     const x = it(e), z = x.zone === "wall" ? -2 : x.flat ? -1 : (e.y + x.h) * PX - 0.5;
     out.push({ e, z });
   }
-  if (cat) {
-    const p = cat.mode === "jump" ? { y: Infinity } : cat.perch ? { y: out.find((o) => o.e.id === cat.perch)?.z + 0.1 } : { y: cat.y };
-    out.push({ cat: true, z: p.y ?? cat.y });
-  }
+  for (const k of cats.drawables(K, zOf)) out.push({ cat: k, z: k.z });
   return out.sort((a, b) => a.z - b.z);
 }
 function drawItem(c, e, alpha = 1, rows = null) {
@@ -404,11 +345,8 @@ function draw(t = performance.now()) {
     for (let y = 0; y <= ROOM.h; y++) { c.beginPath(); c.moveTo(0, y * PX * K); c.lineTo(AW * K, y * PX * K); c.stroke(); }
   }
   for (const d of drawOrder()) {
-    if (d.cat) {
-      drawCat(c, t);
-      const e = cat.perch && placed(cat.perch), it = e && DEN_ITEM.get(e.id);
-      if (it?.front && cat.mode === "perch") drawItem(c, e, 1, it.front); // 紙箱前面蓋住貓的腳
-    } else drawItem(c, d.e);
+    if (d.cat) d.cat.draw(c, t);
+    else drawItem(c, d.e);
     if (focus && d.e?.id === focus && !hold) outline(c, d.e, "#d9741a");
   }
   if (hold && hover) {
@@ -431,7 +369,7 @@ function start() {
   last = performance.now();
   const loop = (t) => {
     if ($("#den").hidden) { raf = 0; return; }
-    update(t, Math.min(0.1, (t - last) / 1000)); last = t;
+    cats.update(t, Math.min(0.1, (t - last) / 1000)); last = t;
     draw(t);
     raf = requestAnimationFrame(loop);
   };

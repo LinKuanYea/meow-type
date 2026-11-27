@@ -319,3 +319,4 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .lve{font-size:12px;color:var(--todo)}
 .lve b{color:var(--gin)}
 #restart0{margin-left:auto}
+.denstage canvas:focus-visible{outline:3px solid var(--gin);outline-offset:3px}
