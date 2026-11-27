@@ -3,6 +3,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dbh, getSetting, setSetting } from "./stats.js";
+import { getSet } from "./custom.js";
+import { CUSTOM_ID, customLevel } from "../shared/custom.js";
 import { NEWS_ID, NEWS_KEY, keyDate, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
 import { replay } from "../shared/judge.js";
 // 打錯時的規則只剩「要倒退修」（林老師 11-27 決定）；judge.js 仍認得三種，給舊資料用
@@ -69,7 +71,11 @@ export function newsBoard(key, user) {
     WHERE a.level=? AND a.stars>0 AND u.banned=0 ORDER BY a.speed DESC LIMIT 20`).all("news-" + key)
     .map((r) => ({ name: r.name, speed: r.speed, acc: r.acc, stars: r.stars, me: user?.id === r.id }));
 }
-const levelOf = (id) => { const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? withSegs(newsLevel(n)) : null; };
+const levelOf = (id) => {
+  const c = CUSTOM_ID.exec(id || "");
+  if (c) { const s = getSet(c[1]); return s ? withSegs(customLevel(s)) : null; }
+  const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? withSegs(newsLevel(n)) : null;
+};
 
 const owned = (uid) => new Set(dbh().prepare("SELECT item FROM items WHERE user_id=?").all(uid).map((r) => r.item));
 const starMap = (uid) => Object.fromEntries(dbh().prepare("SELECT level, stars FROM adv WHERE user_id=?").all(uid).map((r) => [r.level, r.stars]));
@@ -159,7 +165,8 @@ export function advClear(user, b) {
       const streak = streakOf([...before, ...(isToday && stars > 0 ? [today] : [])], today);
       out.fish = newsFishFor(isToday, prev, stars, repToday, hadToday ? 0 : streak, FISH.replay, FISH.replayPerDay);
       out.streak = streak;
-    } else out.fish = fishFor(lv, prev, stars, repToday);
+    } else if (lv.custom) out.fish = 0; // 老師自訂題組不給小魚乾（題目誰都能出，避免刷）
+    else out.fish = fishFor(lv, prev, stars, repToday);
     if (stars > 0) {
       db.prepare(`INSERT INTO adv (user_id, level, stars, speed, acc, clears, first_ts, last_ts) VALUES (?,?,?,?,?,1,?,?)
         ON CONFLICT(user_id, level) DO UPDATE SET stars=MAX(stars, excluded.stars), speed=MAX(COALESCE(speed,0), excluded.speed), acc=MAX(COALESCE(acc,0), excluded.acc), clears=clears+1, last_ts=excluded.last_ts`)
@@ -225,8 +232,8 @@ export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, u
     if (!Number.isInteger(seg) || seg < 0 || seg >= lv.segs.length) return { status: 400, error: "格式不對" };
     const r = replay({ texts: lv.segs[seg], rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
     if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
-    const title = lv.news ? `📰 ${lv.news.date.slice(5).replace("-", "/")} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
-    p = { scene: "battle", lang: lv.lang, texts: lv.segs[seg], boss: lv.boss, big: !!lv.big, title: title + (lv.segs.length > 1 ? `（第 ${seg + 1}/${lv.segs.length} 段）` : ""), stars: lv.segs.length > 1 ? (user ? starMap(user.id)[lv.id] || 0 : 0) : starsOf(lv, r.sum), unit: "WPM" };
+    const title = lv.news ? `📰 ${lv.news.date.slice(5).replace("-", "/")} ${lv.name}` : lv.custom ? `✎ ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
+    p = { scene: "battle", lang: lv.lang, texts: lv.segs[seg], boss: lv.boss, big: !!lv.big, title: title + (lv.segs.length > 1 ? `（第 ${seg + 1}/${lv.segs.length} 段）` : ""), stars: lv.segs.length > 1 ? (user ? starMap(user.id)[lv.id] || 0 : 0) : starsOf(lv, r.sum), unit: unitOf(lv.lang) };
   } else if (b.kind === "practice") {
     if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m)) return { status: 400, error: "格式不對" };
     const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];

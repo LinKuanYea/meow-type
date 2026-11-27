@@ -10,6 +10,8 @@ import { CAT_NAME, LEN_NAME } from "../shared/bank.js";
 import { newsIndex, setNewsHidden, getNews } from "./quest.js";
 import { twDate } from "../shared/news.js";
 import { ISLANDS } from "../shared/quest.js";
+import { CUSTOM_LANGS, CUSTOM_TARGET, CUSTOM_MAX } from "../shared/custom.js";
+import { createSet, listSets, setSetHidden, getSet } from "./custom.js";
 import { oauthConfig, googleReady, currentUser, endSession } from "./auth.js";
 
 const PASSWORD = process.env.ADMIN_PASSWORD || process.env.STATS_PASSWORD || "";
@@ -73,7 +75,8 @@ table{border-collapse:collapse;width:100%;background:#fff;font-size:14px}th,td{b
 .wrap{overflow-x:auto}.k{display:flex;flex-wrap:wrap;gap:10px}.k div{background:#fff;border:2px solid #ecdcc8;border-radius:10px;padding:6px 12px}.k b{display:block;font-size:24px}
 p.n,.n{color:#8a735f;font-size:13px}a{color:#c0641a}
 .card{background:#fff;border:2px solid #ecdcc8;border-radius:14px;padding:16px 20px;margin:14px 0;max-width:820px}
-label{display:block;font-weight:700;margin:14px 0 4px}input[type=text],input[type=password],input[type=url]{font:inherit;font-size:16px;width:100%;max-width:640px;box-sizing:border-box;min-height:42px;padding:0 10px;border:2px solid #ecdcc8;border-radius:10px}
+label{display:block;font-weight:700;margin:14px 0 4px}textarea,select{font:inherit;font-size:16px;width:100%;max-width:820px;box-sizing:border-box;padding:8px 10px;border:2px solid #ecdcc8;border-radius:10px}textarea{min-height:260px;font-family:"JetBrains Mono",ui-monospace,monospace}input[type=number]{font:inherit;width:120px;min-height:42px;padding:0 10px;border:2px solid #ecdcc8;border-radius:10px}
+input[type=text],input[type=password],input[type=url]{font:inherit;font-size:16px;width:100%;max-width:640px;box-sizing:border-box;min-height:42px;padding:0 10px;border:2px solid #ecdcc8;border-radius:10px}
 input:focus-visible,button:focus-visible{outline:3px solid #d9741a;outline-offset:1px}
 button{font:inherit;font-weight:700;min-height:42px;padding:0 16px;border-radius:10px;border:2px solid #d9741a;background:#d9741a;color:#fff;cursor:pointer}
 button.sec,a.btnlink{background:#fff;color:#d9741a}button.small{min-height:32px;padding:0 10px;font-size:13px}button.warn{background:#c0392b;border-color:#c0392b}form.inl{display:inline-flex;gap:4px;align-items:center;margin:2px 0}
@@ -83,7 +86,7 @@ code{background:#f6ead9;border-radius:4px;padding:1px 5px;font-size:14px;word-br
 </style></head><body>${body}</body></html>`);
 }
 function shell(res, cur, inner, msg, me) {
-  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/quest", "冒險模式"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
+  const tabs = [["/admin", "統計"], ["/admin/scores", "排行榜與分享"], ["/admin/news", "每日新聞"], ["/admin/quest", "冒險模式"], ["/admin/sets", "自訂題組"], ["/admin/users", "帳號與管理員"], ["/admin/google", "Google 登入"], ["/admin/data", "資料"]];
   page(res, "喵打管理", `<header><b>喵打管理</b><nav>${tabs.map(([h, t]) => `<a href="${h}"${h === cur ? ' aria-current="page"' : ""}>${t}</a>`).join("")}</nav>
 <form method="post" action="/admin/logout"><span class="who">${me?.kind === "google" ? esc(me.user.email || me.user.nick || "管理員") : "密碼登入"}</span> <button type="submit">登出</button></form></header>
 <!--email_off--><main>${msg ? `<div class="msg${msg.err ? " err" : ""}" role="status">${esc(msg.text)}</div>` : ""}${inner}</main><!--/email_off-->`);
@@ -95,6 +98,7 @@ const MSGS = { saved: "已儲存，馬上生效。", cleared: "已清除 Google 
   pwon: "已重新啟用密碼登入。", banned: "已停權：這個帳號的排行榜成績和分享連結都不再顯示，也不能再上榜、分享或改暱稱。", unbanned: "已恢復，成績和分享會重新顯示。",
   hidden: "已標記暱稱不雅：成績保留、名次不變，暱稱改顯示「" + HIDDEN_NAME + "」。", unhidden: "已取消標記，暱稱重新顯示。",
   approved: "已放行：這筆成績會出現在排行榜。", unapproved: "已取消放行：這筆成績不再出現在排行榜。",
+  setok: "已新增題組，把下面的連結給學生。", sethid: "已收起來：學生打不開這個題組（成績還在，可以恢復）。", setshow: "已恢復，學生又可以打了。",
   newshid: "已下架：學生看不到這一天的新聞（資料還在，可以恢復）。", newsshow: "已恢復上架。",
   banadmin: "管理員不能停權，請先取消管理員。", needgoogle: "要先用管理員的 Google 帳號登入管理頁，才能停用密碼登入（避免把自己鎖在外面）。", nopw: "伺服器沒有設定管理密碼，不能啟用密碼登入。" };
 const ERRS = ["bad", "origin", "last", "needgoogle", "nopw", "banadmin"];
@@ -179,6 +183,21 @@ export async function handleAdmin(req, res, url) {
       console.warn(`[管理] ${act === "approve" ? "放行" : "取消放行"}可疑成績 #${id}`);
       redirect(res, `/admin/scores?m=${act === "approve" ? "approved" : "unapproved"}${back}`); return true;
     }
+    if (p === "/admin/sets") {
+      const f = await readForm(req, 256 * 1024), act = f?.get("action");
+      if (act === "create") {
+        const input = { title: f.get("title"), lang: f.get("lang"), target: f.get("target"), text: f.get("text") };
+        const r = createSet(input, me.kind === "google" ? me.user.id : null);
+        if (r.error) { shell(res, "/admin/sets", setsPage(req, input), { text: r.error, err: true }, me); return true; }
+        console.warn(`[管理] 新增自訂題組 ${r.id}`);
+        redirect(res, `/admin/sets?m=setok&id=${r.id}`); return true;
+      }
+      const id = String(f?.get("id") || "");
+      if (!["hide", "show"].includes(act) || !getSet(id, true)) { redirect(res, "/admin/sets?m=bad"); return true; }
+      setSetHidden(id, act === "hide");
+      console.warn(`[管理] 自訂題組 ${id}：${act === "hide" ? "收起來" : "恢復"}`);
+      redirect(res, `/admin/sets?m=${act === "hide" ? "sethid" : "setshow"}`); return true;
+    }
     if (p === "/admin/news") {
       const f = await readForm(req);
       const date = String(f?.get("key") || f?.get("date") || ""), act = f?.get("action"); // date：新聞的 key
@@ -225,6 +244,7 @@ export async function handleAdmin(req, res, url) {
   if (p === "/admin") { shell(res, "/admin", `<h1>統計</h1>${renderStatsBody()}`, msg, me); return true; }
   if (p === "/admin/scores") { shell(res, "/admin/scores", scoresPage(url), msg, me); return true; }
   if (p === "/admin/news") { shell(res, "/admin/news", newsPage(), msg, me); return true; }
+  if (p === "/admin/sets") { shell(res, "/admin/sets", setsPage(req), msg, me); return true; }
   if (p === "/admin/quest") { shell(res, "/admin/quest", questPage(url), msg, me); return true; }
   if (p === "/admin/users") { shell(res, "/admin/users", usersPage(me), msg, me); return true; }
   if (p === "/admin/google") { shell(res, "/admin/google", googlePage(req), msg, me); return true; }
@@ -281,6 +301,32 @@ ${f ? "" : `<h2>分享連結</h2>
 <div class="wrap"><table><thead><tr><th>連結</th><th>時間</th><th>暱稱</th><th>題目</th><th>速度</th><th>被打開</th><th>接受挑戰</th><th></th></tr></thead><tbody>
 ${shares.map((r) => `<tr><td><a href="/c/${esc(r.id)}" target="_blank" rel="noopener">${esc(r.id)}</a></td><td>${tw(r.ts)}</td><td>${nameCell(r)}</td><td>${what(r)}</td><td>${speed(r)}</td><td>${r.views}</td><td>${r.accepts}</td><td>${hideBtn("share", r)}</td></tr>`).join("")
   || '<tr><td colspan="8">還沒有分享。</td></tr>'}</tbody></table></div><p class="n">最多列最近 100 筆。</p>`}`;
+}
+
+// 老師自訂題組：新增、列表（連結、打過的人數）、收起來／恢復
+function setsPage(req, v = {}) {
+  const base = siteBase(req), list = listSets(), url = new URL(req.url, "http://x"), newId = url.searchParams.get("id");
+  const lang = CUSTOM_LANGS[v.lang] ? v.lang : "en";
+  return `<h1>自訂題組</h1>
+<p>貼一篇課文、一段講義或一段程式，產生一個連結給學生打（例如這週英文課本那一課）。學生打的畫面跟冒險模式一樣：打怪、星星、排行榜，長的會自動分段存檔；<b>不給小魚乾</b>。不用登入也能打，登入的人會上這個題組的排行榜。</p>
+<div class="card"><form method="post" action="/admin/sets"><input type="hidden" name="action" value="create">
+<label for="st">標題（學生看得到，${CUSTOM_MAX.title} 字以內）</label><input id="st" type="text" name="title" maxlength="${CUSTOM_MAX.title}" required value="${esc(v.title || "")}" placeholder="例：英文 B3 L5 課文">
+<label for="sl">語言</label><select id="sl" name="lang">${Object.entries(CUSTOM_LANGS).map(([k, t]) => `<option value="${k}"${k === lang ? " selected" : ""}>${t}</option>`).join("")}</select>
+<label for="sg">三星速度（英文、程式是 WPM，中文是字/分；空白用預設：英文 ${CUSTOM_TARGET.en}、中文 ${CUSTOM_TARGET.zh}、程式 ${CUSTOM_TARGET.cpp}）</label><input id="sg" type="number" name="target" min="5" max="200" value="${esc(v.target || "")}">
+<label for="sx">內容</label><textarea id="sx" name="text" required spellcheck="false" placeholder="英文、中文：每一行是一段要打的文字。&#10;程式：整段照貼（Tab 會換成 4 個空白）。&#10;要分成好幾篇（或好幾段程式）時，中間放一行 ---">${esc(v.text || "")}</textarea>
+<p class="n">最多 ${CUSTOM_MAX.chars} 字；英文的彎引號、破折號會自動換成鍵盤打得出來的符號，其他打不出來的字元會提醒你。</p>
+<p class="row"><button type="submit">新增題組</button></p></form></div>
+<h2>題組列表</h2>
+<div class="wrap"><table><thead><tr><th>標題</th><th>語言</th><th>連結</th><th>三星</th><th>打過的人</th><th>出擊</th><th>平均速度</th><th>建立</th><th></th></tr></thead><tbody>
+${list.map((x) => `<tr${x.hidden ? ' class="bn"' : ""}${x.id === newId ? ' style="outline:3px solid #2d7a1f"' : ""}><td>${esc(x.title)}</td><td>${CUSTOM_LANGS[x.lang] || x.lang}</td>
+  <td><code>${esc(base)}/t/${x.id}</code></td><td>${x.target}</td><td>${x.users}</td><td>${x.runs}</td><td>${x.sp ? Math.round(x.sp) : "—"}</td><td>${new Date(x.created + 8 * 3600000).toISOString().slice(0, 10)}</td>
+  <td><form method="post" action="/admin/sets" class="inl"><input type="hidden" name="id" value="${x.id}"><input type="hidden" name="action" value="${x.hidden ? "show" : "hide"}"><button type="submit" class="small ${x.hidden ? "sec" : "warn"}">${x.hidden ? "恢復" : "收起來"}</button></form></td></tr>`).join("")
+  || '<tr><td colspan="9">還沒有題組。</td></tr>'}</tbody></table></div>
+<p class="n">收起來＝學生打不開，成績保留；題組不能刪除或修改（排行榜和學生的進度記的是編號），要改內容就新增一個。</p>`;
+}
+function siteBase(req) {
+  const u = String(getSetting("public_url") || process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+  return u || "http://" + String(req.headers.host || "").replace(/[^0-9A-Za-z.:-]/g, "");
 }
 
 // 冒險模式統計：各關玩過、過關、三星的人數，過關率，卡關人數（打過但還沒過關的人）。只算登入的人（沒登入的成績存在瀏覽器）。

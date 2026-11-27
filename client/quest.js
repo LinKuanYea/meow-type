@@ -3,6 +3,7 @@ import { ISLANDS, LEVELS, starsOf, unlocked, STAR_RULE, FISH, learnItem, withSeg
 import { ITEMS, ITEM, SLOTS, DEFAULT_OUTFIT } from "/shared/items.js";
 import { BANK } from "/shared/bank.js";
 import { newsLevel, NEWS_FISH, NEWS_TARGET } from "/shared/news.js";
+import { customLevel } from "/shared/custom.js";
 import { Typist, summarize } from "/shared/judge.js";
 import { esc } from "/shared/analyze.js";
 import { ME, loadMe, onLogin, login, askLogin } from "/account.js";
@@ -153,7 +154,7 @@ function play(lv, seg = segDone(lv)) {
     queueMicrotask(finish);
   });
   R.ty.setText(texts[0]);
-  $("#lvName").textContent = (lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`) + (nSeg > 1 ? `（第 ${seg + 1}/${nSeg} 段）` : "");
+  $("#lvName").textContent = (lv.news ? `📰 ${fmtDate(lv.news.date)}　${lv.name}` : lv.custom ? `✎ ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1}　${lv.name}`) + (nSeg > 1 ? `（第 ${seg + 1}/${nSeg} 段）` : "");
   $("#restart0").hidden = seg === 0;
   const code = lv.lang === "cpp" || lv.lang === "py", cjk = code && lv.texts.some((t) => /[\u3000-\u9fff\uff00-\uffef]/.test(t));
   $("#hint").textContent = (code ? "Tab 縮排（補到 4 的倍數）・" : "") + "Esc 重來這一關・不能貼上" + (cjk ? "・字串裡的中文要切回中文輸入法，打完再切回英數" : "");
@@ -254,7 +255,7 @@ function renderSegDone(lv, seg, nSeg, sum, out) {
   $("#res").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 function nextLevel(lv) {
-  if (lv.news) return null;
+  if (lv.news || lv.custom) return null;
   for (const is of ISLANDS) for (const ch of is.chapters) { const k = ch.levels.indexOf(lv); if (k >= 0) return ch.levels[k + 1] || is.chapters[is.chapters.indexOf(ch) + 1]?.levels[0] || null; }
   return null;
 }
@@ -264,19 +265,20 @@ function renderResult(lv, sum, out, prev) {
   const it = learnItem(lv), spec = it ? { c: lv.lang, l: it.len, i: [BANK[lv.lang][it.len].indexOf(it)] } : null;
   const L = spec ? learnCard(spec, lv.lang, it.len) : lv.news ? { html: newsLearn(lv.news), bind: bindNewsQuiz } : null;
   const why = s === 0 ? (out.flagged ? "這次的打字節奏不太像人打的，不算過關。" : "正確率要 85% 以上才算打倒怪物，再試一次！")
-    : s === 1 ? "正確率 95% 以上就有第 2 顆星。" : s === 2 ? `速度到 ${lv.target} WPM 就有第 3 顆星。` : "三顆星全拿！";
+    : s === 1 ? "正確率 95% 以上就有第 2 顆星。" : s === 2 ? `速度到 ${lv.target} ${unitTxt(lv)} 就有第 3 顆星。` : "三顆星全拿！";
   $("#res").innerHTML = `<div class="res questres">
     <h2>${s ? `打倒${esc(lv.boss.name)}！` : `${esc(lv.boss.name)}還站著…`}</h2>
     <p class="bigstars" aria-label="${s} 顆星">${starsTxt(s)}</p><p>${why}${s > prev && prev ? `（原本 ${prev} 顆）` : ""}</p>
-    <div class="big"><div><small>速度（WPM）</small><strong>${Math.round(sum.speed)}</strong></div>
+    <div class="big"><div><small>速度（${unitTxt(lv)}）</small><strong>${Math.round(sum.speed)}</strong></div>
       <div class="s"><small>正確率</small><strong>${Math.round(sum.acc * 100)}%</strong></div>
       <div class="s"><small>時間</small><strong>${(sum.ms / 1000).toFixed(1)} 秒</strong></div></div>
     ${out.error ? `<p class="nickrule">${esc(out.error)}</p>` : ""}
     ${ST.login ? (out.fish ? `<p class="gain">🐟 +${out.fish} 小魚乾（現在 ${ST.fish} 條）${out.streak ? `　🔥 連續 ${out.streak} 天` : ""}</p>` : s && s <= prev ? `<p class="hint">重打已經拿過的星星：每次 ${FISH.replay} 條小魚乾，每天最多 ${FISH.replayPerDay} 次。</p>` : "")
+      : lv.custom ? `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>就能上這個題組的排行榜。</p>`
       : `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>就能拿小魚乾、換裝，進度也會存起來（第 2 章以後要登入）。</p>`}
     ${out.drops?.length ? `<div class="drop"><canvas id="dropCv" width="160" height="140"></canvas><p>獲得裝扮：<b>${esc(ITEM.get(out.drops[0]).name)}</b>！到「換裝」穿上它。</p></div>` : ""}
     ${canMakeVideo() && !out.flagged && !out.error ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛的打怪過程做成幾秒的直式影片，可以分享到 IG 限時動態。</span></div>` : ""}
-    ${L ? L.html : ""}
+    ${L ? L.html : ""}${lv.custom ? '<div class="board" id="setBoard"><p class="empty">排行榜載入中…</p></div>' : ""}
     <div class="btns">${canNext ? '<button class="main" id="bNext" type="button">下一關</button>' : ""}<button${canNext ? "" : ' class="main"'} id="bAgain" type="button">再打一次</button><button id="bMap" type="button">回地圖</button></div></div>`;
   if (out.drops?.length) { const c = $("#dropCv").getContext("2d"); c.imageSmoothingEnabled = false; drawDressed(c, 8, 0, 9, 0, { ...ST.outfit, [ITEM.get(out.drops[0]).slot]: out.drops[0] }); }
   if (L) L.bind($("#res"), { answered: 0, correct: 0, skipped: 0, opened: 0, onAnswer: (ok) => ok && toast("答對了！") });
@@ -284,8 +286,24 @@ function renderResult(lv, sum, out, prev) {
   $("#bAgain").onclick = () => play(lv);
   $("#bMap").onclick = renderMap;
   if (lv.news) $("#bMap").textContent = "回新聞列表";
+  if (lv.custom) { $("#bMap").textContent = "去冒險地圖"; showSetBoard(lv.custom.id); }
   if (canNext) $("#bNext").onclick = () => play(nx);
   $("#res").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+}
+const unitTxt = (lv) => (lv.lang === "zh" ? "字/分" : "WPM");
+/* ---------- 老師自訂題組（/t/編號） ---------- */
+async function showSetBoard(id) {
+  const b = online ? await api(`/api/set/${id}/board`) : { error: "離線" };
+  const el = $("#setBoard"); if (!el) return;
+  el.innerHTML = `<h4>這個題組的排行榜</h4>` + (b.error || !b.length ? `<p class="empty">${ST.login ? "還沒有人上榜（要過關才算）" : "登入的人過關後會上榜"}</p>`
+    : `<table class="lb"><tbody>${b.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}${x.me ? "（你）" : ""}</td><td class="n">${Math.round(x.speed)}</td><td class="n">${starsTxt(x.stars)}</td></tr>`).join("")}</tbody></table>`);
+}
+const SET_PATH = /^\/t\/([0-9A-Za-z]{6})$/.exec(location.pathname);
+async function playSet(id) {
+  const s = await api("/api/set/" + id);
+  if (s.error) { renderMap(); return toast(s.error); }
+  document.title = `${s.title}｜喵打`;
+  play(withSegs(customLevel(s)));
 }
 function bindNewsQuiz(root) {
   root.querySelectorAll(".nq").forEach((fs) => fs.addEventListener("change", (e) => {
@@ -298,7 +316,7 @@ function bindNewsQuiz(root) {
 }
 /* ---------- 縮時影片 ---------- */
 function videoUI(lv, out) {
-  const title = lv.news ? `📰 ${fmtDate(lv.news.date)} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
+  const title = lv.news ? `📰 ${fmtDate(lv.news.date)} ${lv.name}` : lv.custom ? `✎ ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
   videoPanel($("#vid"), { scene: "battle", lang: lv.lang, texts: out.segTexts || lv.texts, boss: lv.boss, big: lv.big, rule: out.rule, events: out.events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: out.stars, unit: "WPM", title }, {
     link: { kind: "quest", level: lv.id, seg: out.seg || 0, stars: out.stars, rule: out.rule, events: out.events }, toast, file: `meow-type-${lv.id}`,
     shareText: `我在喵打打倒了${lv.boss.name}！你打得贏嗎？ https://meow-type.otlab.org/quest`,
@@ -359,8 +377,8 @@ addEventListener("resize", () => { if (R && !$("#play").hidden) TB.paint(); });
 (async () => {
   await loadMe();
   await loadState();
-  renderMap();
-  askLogin("（沒登入只能玩第 1 章）");
+  if (SET_PATH) { await playSet(SET_PATH[1]); askLogin("（登入才會上這個題組的排行榜）"); }
+  else { renderMap(); askLogin("（沒登入只能玩第 1 章）"); }
   window.__mtReady = true;
 })();
 onLogin(async () => { await loadState(); if (!$("#map").hidden) renderMap(); else if (!$("#closet").hidden) renderCloset(); else if (!$("#den").hidden) den(); if (ME.user) toast("登入了！進度和小魚乾會存在你的帳號"); });

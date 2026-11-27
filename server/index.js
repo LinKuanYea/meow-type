@@ -11,6 +11,7 @@ import { replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
 import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink, RULE } from "./quest.js";
 import { initDen, denState, denBuy, denSave } from "./den.js";
+import { initCustom, getSet, setBoard } from "./custom.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange, oauthConfig } from "./auth.js";
 import { shareImage } from "./ogimage.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId, dropOtherRuleScores } from "./stats.js";
@@ -33,6 +34,7 @@ initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
 dropOtherRuleScores();
 initAdventure();
 initDen();
+initCustom();
 initVlinks();
 
 /* ---------- Node 版本檢查（2026-10-21 資安更新） ---------- */
@@ -73,6 +75,12 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/news") return json(res, 200, newsOverview(currentUser(req)));
     const vm = /^\/api\/vlink\/([0-9A-Za-z]{8})$/.exec(url.pathname);
     if (vm) { const v = getVlink(vm[1]); return v ? json(res, 200, v) : json(res, 404, { error: "這個影片連結不存在或已經過期（7 天）" }); }
+    const setM = /^\/api\/set\/([0-9A-Za-z]{6})(\/board)?$/.exec(url.pathname);
+    if (setM) {
+      const set = getSet(setM[1]);
+      const r = !set ? null : setM[2] ? setBoard(setM[1], currentUser(req)) : { id: set.id, title: set.title, lang: set.lang, texts: set.texts, target: set.target };
+      return r ? json(res, 200, r) : json(res, 404, { error: "找不到這個題組（可能打錯網址，或老師收起來了）" });
+    }
     const nm = /^\/api\/news\/(\d{4}-\d{2}-\d{2}(?:-[1-9])?)(\/board)?$/.exec(url.pathname);
     if (nm) {
       const r = nm[2] ? newsBoard(nm[1], currentUser(req)) : getNews(nm[1]);
@@ -101,7 +109,7 @@ export const server = http.createServer(async (req, res) => {
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
     if (p === "/me") p = "/me.html";
-    if (p === "/quest") p = "/quest.html";
+    if (p === "/quest" || /^\/t\/[0-9A-Za-z]{6}$/.test(p)) p = "/quest.html"; // /t/編號：老師自訂題組
     if (/^\/v\/[0-9A-Za-z]{8}$/.test(p)) p = "/v.html";
     if (p === "/adv") { res.writeHead(301, { Location: "/quest" }); res.end(); return; } // v0.9 的舊網址（"adv" 會被廣告阻擋外掛擋掉）
     if (p === "/privacy" || p === "/terms") p += ".html";

@@ -10,6 +10,7 @@ import { Typist, replay, summarize, MAX_AHEAD } from "../shared/judge.js";
 import { analyze, tips, classify, drillText } from "../shared/analyze.js";
 import { ISLANDS, LEVELS, starsOf, fishFor, FISH, withSegs, segmentsOf, mergeSums, etaMin, SEG_MAX } from "../shared/quest.js";
 import { ITEMS, ITEM, cleanOutfit } from "../shared/items.js";
+import { customLevel, cleanCustom } from "../shared/custom.js";
 import { newsLevel, newsFishFor, streakOf, twDate, addDays, NEWS_FISH } from "../shared/news.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -205,6 +206,14 @@ for (const c of ["en", "zh"]) for (const l of LENS) for (let n = 0; n < 50; n++)
   ok(r.ok && r.flags.length === 0, "1 分鐘多段：驗算通過 " + (r.reason || r.flags));
   ok(r.ok && r.sum.ms === 60000 && r.sum.correct === ty.totalCorrect(), "1 分鐘多段：字數和前端一樣");
   void used;
+}
+
+/* ---------- 老師自訂題組 ---------- */
+{
+  const c = cleanCustom({ title: " 迴圈 ", lang: "cpp", text: "for (int i=0;i<3;i++) {  \n\tcout << i;\n}\n---\nint x;\n" });
+  eq([c.title, c.texts, c.target], ["迴圈", ["for (int i=0;i<3;i++) {\n    cout << i;\n}", "int x;"], 15], "自訂題組：程式 Tab 換空白、去行尾空白、--- 分段");
+  eq([cleanCustom({ title: "", lang: "en", text: "a" }).error, cleanCustom({ title: "x", lang: "jp", text: "a" }).error, cleanCustom({ title: "x", lang: "zh", text: "  \n " }).error, cleanCustom({ title: "x", lang: "zh", text: "字".repeat(7000) }).error].map(Boolean), [true, true, true, true], "自訂題組：擋掉沒標題、語言不對、沒內容、太長");
+  eq(cleanCustom({ title: "x", lang: "zh", text: "床前明月光，\n疑是地上霜。", target: "30" }).texts.length, 2, "自訂題組：中文每行一段");
 }
 
 /* ---------- 伺服器 API ---------- */
@@ -434,6 +443,17 @@ try {
   ok((await get(`/api/news/${NT}-3`)).status === 404 && (await get(`/api/news/${NT}-2`)).status === 200, "下架一篇不影響同一天的其他篇");
   ok(!(await (await fetch(base + "/api/news")).json()).list.some((n) => n.key === NT + "-3"), "列表也不顯示下架的那篇");
   ok((await post("/admin/news", `key=${NT}-3&action=show`, AC2)).headers.get("location").includes("m=newsshow"), "恢復那一篇");
+  // 老師自訂題組
+  ok((await (await get("/admin/sets", AC2)).text()).includes("新增題組"), "管理頁：自訂題組");
+  const setForm = (o) => new URLSearchParams({ action: "create", ...o }).toString();
+  const badSet = await (await post("/admin/sets", setForm({ title: "壞的", lang: "en", text: "Hello \u00e9t\u00e9 world" }), AC2)).text();
+  ok(badSet.includes("鍵盤打不出來") && badSet.includes("Hello"), "英文有打不出來的字元：提醒、保留剛剛貼的內容");
+  const setRes = await post("/admin/sets", setForm({ title: "英文 B3 L5", lang: "en", target: "", text: "The cat\u2019s \u201cbig\u201d day \u2014 fun.\n\nIt sat on the mat.\n---\nSecond story here." }), AC2);
+  const setId = /id=([0-9A-Za-z]{6})/.exec(setRes.headers.get("location") || "")?.[1];
+  ok(setRes.headers.get("location").includes("m=setok") && setId, "新增題組 " + setId);
+  ok((await (await get("/admin/sets", AC2)).text()).includes("/t/" + setId), "題組列表有連結");
+  ok((await post("/admin/sets", `id=${setId}&action=hide`, AC2)).headers.get("location").includes("m=sethid") && (await get("/api/set/" + setId)).status === 404, "收起來的題組學生打不開");
+  ok((await post("/admin/sets", `id=${setId}&action=show`, AC2)).headers.get("location").includes("m=setshow") && (await get("/api/set/" + setId)).status === 200, "恢復題組");
   const qp = await (await get("/admin/quest", AC2)).text();
   ok(qp.includes("冒險模式") && qp.includes("宣告與輸入") && qp.includes("卡關") && qp.includes("Python"), "管理頁的冒險模式統計");
   ok((await get("/admin/quest?d=7", AC2)).status === 200 && !(await (await get("/admin/quest")).text()).includes("卡關"), "冒險模式統計：最近 7 天、要登入管理頁");
@@ -616,6 +636,16 @@ try {
   ok(nL3.streak === 1 && nL3.list.find((n) => n.key === NT + "-2").stars === 3 && nL3.list.find((n) => n.key === NT + "-3").stars === 0, "同一天打很多篇，連續天數還是 1 天");
   const nb2 = await (await fetch(base + `/api/news/${NT}-2/board`, { headers: XAV })).json(), nb3 = await (await fetch(base + `/api/news/${NT}-3/board`, { headers: XAV })).json();
   ok(nb2.length === 1 && nb2[0].me && nb3.length === 0, "每篇各有排行榜");
+  // 學生打自訂題組
+  const setD = await (await get("/api/set/" + setId)).json();
+  eq([setD.texts, setD.target, setD.lang], [["The cat's \"big\" day - fun.", "It sat on the mat.", "Second story here."], 25, "en"], "題組內容（彎引號、破折號換掉，每行一段）");
+  ok((await (await get("/t/" + setId)).text()).includes("quest.js"), "/t/編號 打開冒險模式的頁面");
+  const setLv = withSegs(customLevel(setD));
+  const sA = await playSegs(setLv, XAV, 40);
+  ok(sA.ok && sA.stars === 3 && sA.fish === 0, "打自訂題組：有星星、沒有小魚乾");
+  const sB = await (await fetch(base + `/api/set/${setId}/board`, { headers: XAV })).json();
+  ok(sB.length === 1 && sB[0].me, "題組排行榜");
+  eq([(await get("/api/set/zzzzzz")).status, (await get("/api/set/abc")).status], [404, 404], "不存在的題組");
   // 影片連結（電腦打完、手機掃 QR code 做影片）
   ok(["/qr.js", "/vidui.js", "/v.js"].every(Boolean) && (await get("/qr.js")).status === 200 && (await get("/vidui.js")).status === 200 && (await get("/v.js")).status === 200, "影片連結的程式");
   const vq = await (await xAdvpost("/api/vlink", { kind: "quest", level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, XAV)).json();
