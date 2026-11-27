@@ -8,7 +8,7 @@ import { BANK, CATS, LENS, textOf, randomSpec, itemText, itemsOf } from "../shar
 import { CODE } from "../shared/bank-code.js";
 import { Typist, replay, summarize, MAX_AHEAD } from "../shared/judge.js";
 import { analyze, tips, classify, drillText } from "../shared/analyze.js";
-import { ISLANDS, LEVELS, starsOf, fishFor, FISH } from "../shared/adventure.js";
+import { ISLANDS, LEVELS, starsOf, fishFor, FISH } from "../shared/quest.js";
 import { ITEMS, ITEM, cleanOutfit } from "../shared/items.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -371,43 +371,43 @@ try {
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;
   // 冒險模式
-  ok((await get("/adv")).status === 200 && (await get("/adv.js")).status === 200 && (await get("/battle.js")).status === 200 && (await get("/typebox.js")).status === 200 && (await get("/shared/items.js")).status === 200, "冒險模式的網頁");
-  eq(await (await get("/api/adv")).json(), { login: false }, "沒登入：沒有冒險進度");
+  ok((await get("/quest")).status === 200 && (await fetch(base + "/adv", { redirect: "manual" })).headers.get("location") === "/quest" && (await get("/quest.js")).status === 200 && (await get("/battle.js")).status === 200 && (await get("/typebox.js")).status === 200 && (await get("/shared/items.js")).status === 200, "冒險模式的網頁");
+  eq(await (await get("/api/quest")).json(), { login: false }, "沒登入：沒有冒險進度");
   const xAdvpost = (p, b, C = {}) => fetch(base + p, { method: "POST", headers: { "Content-Type": "application/json", ...C }, body: JSON.stringify(b) });
   const xFast = (id, seed = 5) => human(LEVELS.get(id).texts, { seed, gap: [45, 130], errRate: 0 }).evs;
-  const xA0 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") })).json();
+  const xA0 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") })).json();
   ok(xA0.ok && xA0.stars === 3 && xA0.fish === 0, "沒登入也能玩第 1 章（不給小魚乾） " + JSON.stringify(xA0));
-  eq((await xAdvpost("/api/adv/clear", { level: "cpp-2-1", rule: "back", events: xFast("cpp-2-1") })).status, 401, "第 2 章要登入");
-  eq((await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1").slice(0, 5) })).status, 400, "沒打完不算");
+  eq((await xAdvpost("/api/quest/clear", { level: "cpp-2-1", rule: "back", events: xFast("cpp-2-1") })).status, 401, "第 2 章要登入");
+  eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1").slice(0, 5) })).status, 400, "沒打完不算");
   const xAl3 = await fetch(base + "/auth/fake?sub=adv-1&email=adv@example.com", { redirect: "manual" });
   const XAV = { Cookie: "mt_sess=" + /mt_sess=([^;]+)/.exec(xAl3.headers.get("set-cookie"))[1] };
-  eq((await xAdvpost("/api/adv/clear", { level: "cpp-1-2", rule: "back", events: xFast("cpp-1-2") }, XAV)).status, 400, "還沒解鎖的關卡不能打");
-  const xA1 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, XAV)).json();
+  eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-2", rule: "back", events: xFast("cpp-1-2") }, XAV)).status, 400, "還沒解鎖的關卡不能打");
+  const xA1 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, XAV)).json();
   ok(xA1.stars === 3 && xA1.fish === 30 && xA1.total === 30, "第一次三星：30 條小魚乾 " + JSON.stringify(xA1));
-  const xA2 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1", 9) }, XAV)).json();
+  const xA2 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1", 9) }, XAV)).json();
   ok(xA2.fish === FISH.replay && xA2.total === 30 + FISH.replay, "重打：少少的小魚乾");
   const xSlow = human(LEVELS.get("cpp-1-1").texts, { seed: 3, gap: [70, 260], errRate: 0.2 }).evs;
-  const xA3 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xSlow }, XAV)).json();
+  const xA3 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xSlow }, XAV)).json();
   ok(xA3.ok && xA3.stars < 3, "打得比較差：星星不會變少，也不會多拿");
   const xBotev = human(LEVELS.get("cpp-1-1").texts, { gap: [3, 6], errRate: 0 }).evs;
-  const xA4 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-1", rule: "back", events: xBotev }, XAV)).json();
+  const xA4 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xBotev }, XAV)).json();
   ok(xA4.flagged && xA4.stars === 0 && xA4.fish === 0, "可疑的打字：不算過關、沒有小魚乾");
-  for (const id of ["cpp-1-2", "cpp-1-3", "cpp-1-4"]) await xAdvpost("/api/adv/clear", { level: id, rule: "back", events: xFast(id) }, XAV);
-  const xA5 = await (await xAdvpost("/api/adv/clear", { level: "cpp-1-5", rule: "back", events: xFast("cpp-1-5") }, XAV)).json();
+  for (const id of ["cpp-1-2", "cpp-1-3", "cpp-1-4"]) await xAdvpost("/api/quest/clear", { level: id, rule: "back", events: xFast(id) }, XAV);
+  const xA5 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-5", rule: "back", events: xFast("cpp-1-5") }, XAV)).json();
   ok(xA5.stars === 3 && xA5.drops[0] === "back-cout" && xA5.fish === 50, "打倒第 1 章 Boss：掉落 cout 斗篷＋50 條 " + JSON.stringify(xA5));
-  const xSt = await (await fetch(base + "/api/adv", { headers: XAV })).json();
+  const xSt = await (await fetch(base + "/api/quest", { headers: XAV })).json();
   ok(xSt.login && xSt.stars["cpp-1-5"] === 3 && xSt.owned.includes("back-cout") && xSt.fish === xA5.total, "冒險進度");
-  eq((await xAdvpost("/api/adv/buy", { item: "hat-crown" }, XAV)).status, 400, "Boss 掉落的裝扮不能買");
-  eq((await xAdvpost("/api/adv/wear", { outfit: { hat: "hat-cap" } }, XAV)).status, 400, "沒買的不能穿");
-  const xB1 = await (await xAdvpost("/api/adv/buy", { item: "hat-cap" }, XAV)).json();
+  eq((await xAdvpost("/api/quest/buy", { item: "hat-crown" }, XAV)).status, 400, "Boss 掉落的裝扮不能買");
+  eq((await xAdvpost("/api/quest/wear", { outfit: { hat: "hat-cap" } }, XAV)).status, 400, "沒買的不能穿");
+  const xB1 = await (await xAdvpost("/api/quest/buy", { item: "hat-cap" }, XAV)).json();
   ok(xB1.ok && xB1.fish === xSt.fish - ITEM.get("hat-cap").price && xB1.owned.includes("hat-cap"), "用小魚乾買帽子");
-  eq((await xAdvpost("/api/adv/buy", { item: "hat-cap" }, XAV)).status, 400, "已經有的不能再買");
-  const xW1 = await (await xAdvpost("/api/adv/wear", { outfit: { hat: "hat-cap", back: "back-cout" } }, XAV)).json();
+  eq((await xAdvpost("/api/quest/buy", { item: "hat-cap" }, XAV)).status, 400, "已經有的不能再買");
+  const xW1 = await (await xAdvpost("/api/quest/wear", { outfit: { hat: "hat-cap", back: "back-cout" } }, XAV)).json();
   eq(xW1.outfit, { fur: "fur-orange", hat: "hat-cap", back: "back-cout" }, "換裝");
-  eq((await (await fetch(base + "/api/adv", { headers: XAV })).json()).outfit, xW1.outfit, "裝扮有存起來");
-  let xPoor = 0; for (let k = 0; k < 20; k++) { const r = await xAdvpost("/api/adv/buy", { item: ["fur-black", "fur-white", "face-shades", "neck-red", "neck-blue", "fur-gray", "fur-cream", "hat-fisher"][k % 8] }, XAV); if (r.status === 400) xPoor++; }
+  eq((await (await fetch(base + "/api/quest", { headers: XAV })).json()).outfit, xW1.outfit, "裝扮有存起來");
+  let xPoor = 0; for (let k = 0; k < 20; k++) { const r = await xAdvpost("/api/quest/buy", { item: ["fur-black", "fur-white", "face-shades", "neck-red", "neck-blue", "fur-gray", "fur-cream", "hat-fisher"][k % 8] }, XAV); if (r.status === 400) xPoor++; }
   ok(xPoor > 0, "小魚乾不夠就買不了");
-  ok((await (await fetch(base + "/api/adv", { headers: XAV })).json()).fish >= 0, "小魚乾不會變負的");
+  ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).fish >= 0, "小魚乾不會變負的");
   ok(!JSON.stringify(ex).includes(text.slice(0, 20)), "資料庫不存打字內容");
   ok(!JSON.stringify(ex).includes("cat@example.com") && !JSON.stringify(ex).includes("g-123"), "匯出資料不含 email 與 Google 編號");
 } catch (e) { fail++; console.log("✗ 伺服器測試出錯：" + e.stack + "\n" + log.slice(-600)); }

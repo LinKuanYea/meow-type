@@ -8,7 +8,10 @@
 //   要拿掉一題：在那一題加 "retired": true（不會再出題，但編號保留）。
 // - 英文只能用半形英文字、數字、標點；中文句子的標點要全形。
 // - 英文單字要有詞性、中文意思、程度（1 = 國中，2 = 高中）。
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+//
+// 每日新聞（content/news/YYYY-MM-DD.json，格式見 content/news/README.md）也在這裡檢查，
+// 複製到 shared/news/日期.json，並產生 shared/news/index.json（日期、標題、主題）。
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -102,6 +105,42 @@ for (const [c, ls] of Object.entries(SRC)) {
   }
 }
 
+/* ---------- 每日新聞 ---------- */
+const NEWS_DIR = "content/news", NEWS_OUT = "shared/news";
+const news = {};
+const words = (t) => (t.match(/[A-Za-z0-9'-]+/g) || []).length;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filter((x) => x.endsWith(".json")).sort() : []) {
+  const where = `${NEWS_DIR}/${f}`, date = f.slice(0, -5);
+  let n;
+  try { n = JSON.parse(readFileSync(root + where, "utf8")); } catch (e) { err(where, "JSON 格式錯誤：" + e.message); continue; }
+  if (!DATE.test(date) || n.date !== date) err(where, "date 要跟檔名一樣（YYYY-MM-DD）");
+  if (typeof n.title !== "string" || !n.title.trim() || n.title.length > 60) err(where, "title：中文標題，60 字以內");
+  if (typeof n.topic !== "string" || !n.topic.trim()) err(where, "缺 topic");
+  if (!Array.isArray(n.paras) || n.paras.length < 2 || n.paras.length > 5) err(where, "paras：2～5 段");
+  for (const [i, t] of (n.paras || []).entries()) {
+    if (typeof t !== "string" || !EN_OK.test(t)) err(`${where} 第 ${i + 1} 段`, `有不該出現的字元（彎引號、破折號、全形…）：${JSON.stringify(String(t).replace(/[A-Za-z0-9 .,;:!?'"()\-]/g, ""))}`);
+    else if (/\s{2,}|^\s|\s$/.test(t)) err(`${where} 第 ${i + 1} 段`, "多餘的空白");
+  }
+  const wc = (n.paras || []).reduce((a, t) => a + words(String(t)), 0);
+  if (wc < 120 || wc > 280) err(where, `全文 ${wc} 字，要 120～280 字`);
+  if (!Array.isArray(n.vocab) || n.vocab.length < 5 || n.vocab.length > 12) err(where, "vocab：5～12 個");
+  for (const [k, vb] of (n.vocab || []).entries()) {
+    const w2 = `${where} vocab[${k}]`;
+    if (!vb.w || !vb.zh || !POS.test(vb.pos || "") || ![1, 2, 3, 4, 5, 6].includes(vb.lv)) err(w2, "要有 w、pos、zh、lv（大考詞彙級數 1～6）");
+    else if (!(n.paras || []).join(" ").toLowerCase().includes(vb.w.toLowerCase().split(" ")[0])) err(w2, `文章裡找不到「${vb.w}」`);
+  }
+  if (!Array.isArray(n.questions) || n.questions.length < 2 || n.questions.length > 3) err(where, "questions：2～3 題");
+  for (const [k, q] of (n.questions || []).entries()) {
+    const w2 = `${where} questions[${k}]`;
+    if (!q.q || !Array.isArray(q.options) || q.options.length !== 4 || !Number.isInteger(q.answer) || q.answer < 0 || q.answer > 3 || !q.why) err(w2, "要有 q、4 個 options、answer（0～3）、why（中文說明）");
+    else if (new Set(q.options).size !== 4) err(w2, "選項重複");
+  }
+  if (!Array.isArray(n.sources) || !n.sources.length || n.sources.some((x) => !x.name || !/^https:\/\/[^\s"<>]+$/.test(x.url || ""))) err(where, "sources：至少 1 個 { name, url（https） }");
+  news[date] = { date, title: n.title, topic: n.topic, paras: n.paras, vocab: n.vocab, questions: n.questions, sources: n.sources };
+}
+const newsIndex = Object.values(news).sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ date, title, topic }) => ({ date, title, topic }));
+
 if (errs.length) {
   console.error("題庫檢查沒過：\n" + errs.map((e) => "  ✗ " + e).join("\n"));
   process.exit(1);
@@ -109,14 +148,20 @@ if (errs.length) {
 const out = `// 由 scripts/build-text-bank.mjs 從 content/en、content/zh 產生，不要手改。\n` +
   `export const TEXT = ${JSON.stringify(bank, null, 0).replace(/\],"/g, '],\n"').replace(/\},\{/g, "},\n{")};\n`;
 const lockOut = JSON.stringify(newLock, null, 1) + "\n";
+const newsFiles = { "index.json": JSON.stringify(newsIndex) + "\n" };
+for (const n of Object.values(news)) newsFiles[n.date + ".json"] = JSON.stringify(n) + "\n";
 if (process.argv.includes("--check")) {
   const cur = existsSync(root + OUT) ? readFileSync(root + OUT, "utf8") : "";
   const curLock = existsSync(root + LOCK) ? readFileSync(root + LOCK, "utf8") : "";
-  if (cur !== out || curLock !== lockOut) { console.error("content/ 改過了，請執行 node scripts/build-text-bank.mjs 重新產生"); process.exit(1); }
-  console.log("英文、中文題庫：檢查通過");
+  const have = existsSync(root + NEWS_OUT) ? readdirSync(root + NEWS_OUT).sort() : [];
+  const newsOk = JSON.stringify(have) === JSON.stringify(Object.keys(newsFiles).sort()) && Object.entries(newsFiles).every(([f, c]) => readFileSync(`${root}${NEWS_OUT}/${f}`, "utf8") === c);
+  if (cur !== out || curLock !== lockOut || !newsOk) { console.error("content/ 改過了，請執行 node scripts/build-text-bank.mjs 重新產生"); process.exit(1); }
+  console.log("英文、中文題庫、每日新聞：檢查通過");
 } else {
   writeFileSync(root + OUT, out);
   writeFileSync(root + LOCK, lockOut);
+  rmSync(root + NEWS_OUT, { recursive: true, force: true }); mkdirSync(root + NEWS_OUT, { recursive: true });
+  for (const [f, c] of Object.entries(newsFiles)) writeFileSync(`${root}${NEWS_OUT}/${f}`, c);
   const n = (c) => Object.entries(bank[c]).map(([l, a]) => `${l} ${a.length}`).join("、");
-  console.log(`已產生 ${OUT}（英文：${n("en")}；中文：${n("zh")}）`);
+  console.log(`已產生 ${OUT}（英文：${n("en")}；中文：${n("zh")}）、每日新聞 ${newsIndex.length} 篇`);
 }

@@ -1,5 +1,5 @@
 // 喵打冒險模式：地圖、戰鬥、結算、換裝
-import { ISLANDS, LEVELS, starsOf, unlocked, STAR_RULE, FISH, learnItem } from "/shared/adventure.js";
+import { ISLANDS, LEVELS, starsOf, unlocked, STAR_RULE, FISH, learnItem } from "/shared/quest.js";
 import { ITEMS, ITEM, SLOTS, DEFAULT_OUTFIT } from "/shared/items.js";
 import { BANK } from "/shared/bank.js";
 import { Typist, summarize } from "/shared/judge.js";
@@ -31,7 +31,7 @@ const rule = () => { const r = store.get("mt-settings", {}).rule; return ["block
 const ST = { login: false, fish: 0, stars: {}, best: {}, owned: [], outfit: { ...DEFAULT_OUTFIT } };
 const LOCAL = "mt-adv-local";
 async function loadState() {
-  const s = online ? await api("/api/adv") : { login: false };
+  const s = online ? await api("/api/quest") : { login: false };
   if (s.login) Object.assign(ST, s);
   else Object.assign(ST, { login: false, fish: 0, stars: store.get(LOCAL, {}), best: {}, owned: [], outfit: { ...DEFAULT_OUTFIT } });
   $("#fish").hidden = !ST.login;
@@ -145,7 +145,7 @@ async function finish() {
   let out = { stars: local, fish: 0, drops: [], flagged: false };
   $("#res").innerHTML = `<div class="res"><h2>結算中…</h2></div>`; $("#res").hidden = false;
   if (online) {
-    const r = await api("/api/adv/clear", { level: lv.id, rule: R.rule, events: R.ty.events.slice() });
+    const r = await api("/api/quest/clear", { level: lv.id, rule: R.rule, events: R.ty.events.slice() });
     if (r.error) out.error = r.error; else out = r;
   }
   if (ST.login && !out.error) { ST.stars[lv.id] = Math.max(prev, out.stars); if (typeof out.total === "number") ST.fish = out.total; out.drops.forEach((d) => ST.owned.push(d)); $("#fish").textContent = `🐟 ${ST.fish}`; }
@@ -164,7 +164,7 @@ function renderResult(lv, sum, out, prev) {
   const L = spec ? learnCard(spec, lv.lang, it.len) : null;
   const why = s === 0 ? (out.flagged ? "這次的打字節奏不太像人打的，不算過關。" : "正確率要 85% 以上才算打倒怪物，再試一次！")
     : s === 1 ? "正確率 95% 以上就有第 2 顆星。" : s === 2 ? `速度到 ${lv.target} WPM 就有第 3 顆星。` : "三顆星全拿！";
-  $("#res").innerHTML = `<div class="res advres">
+  $("#res").innerHTML = `<div class="res questres">
     <h2>${s ? `打倒${esc(lv.boss.name)}！` : `${esc(lv.boss.name)}還站著…`}</h2>
     <p class="bigstars" aria-label="${s} 顆星">${starsTxt(s)}</p><p>${why}${s > prev && prev ? `（原本 ${prev} 顆）` : ""}</p>
     <div class="big"><div><small>速度（WPM）</small><strong>${Math.round(sum.speed)}</strong></div>
@@ -212,7 +212,7 @@ $("#slots").addEventListener("click", async (e) => {
   if (b.dataset.buy) {
     const it = ITEM.get(b.dataset.buy);
     if (!confirm(`用 ${it.price} 條小魚乾買「${it.name}」？`)) return;
-    const r = await api("/api/adv/buy", { item: it.id });
+    const r = await api("/api/quest/buy", { item: it.id });
     if (r.error) return toast(r.error);
     Object.assign(ST, r); $("#fish").textContent = `🐟 ${ST.fish}`; toast(`買到了「${it.name}」！`);
     return renderCloset();
@@ -221,7 +221,7 @@ $("#slots").addEventListener("click", async (e) => {
   if (b.dataset.wear) o[ITEM.get(b.dataset.wear).slot] = b.dataset.wear;
   else if (b.dataset.off) delete o[b.dataset.off];
   else return;
-  const r = await api("/api/adv/wear", { outfit: o });
+  const r = await api("/api/quest/wear", { outfit: o });
   if (r.error) return toast(r.error);
   ST.outfit = r.outfit; renderCloset();
 });

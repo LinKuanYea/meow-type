@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
 import { RULES, replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
-import { initAdventure, advState, advClear, advBuy, advWear } from "./adventure.js";
+import { initAdventure, advState, advClear, advBuy, advWear } from "./quest.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
 import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
 
@@ -63,7 +63,7 @@ export const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname.startsWith("/api/")) { await handleApi(req, res, url.pathname); return; }
     if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD, POST" }); res.end(); return; }
     if (url.pathname === "/api/board") return handleBoard(req, res, url.searchParams);
-    if (url.pathname === "/api/adv") return json(res, 200, advState(currentUser(req)));
+    if (url.pathname === "/api/quest") return json(res, 200, advState(currentUser(req)));
     if (url.pathname === "/api/me") {
       const u = currentUser(req);
       return json(res, 200, { login: loginEnabled(), user: u ? { nick: u.nick || "", email: u.email || "", nickNext: nickNextChange(u), banned: !!u.banned } : null });
@@ -85,7 +85,8 @@ export const server = http.createServer(async (req, res) => {
     const shareId = /^\/c\/([0-9A-Za-z]{8})$/.exec(p)?.[1] || "";
     if (p === "/" || shareId) p = "/index.html";
     if (p === "/me") p = "/me.html";
-    if (p === "/adv") p = "/adv.html";
+    if (p === "/quest") p = "/quest.html";
+    if (p === "/adv") { res.writeHead(301, { Location: "/quest" }); res.end(); return; } // v0.9 的舊網址（"adv" 會被廣告阻擋外掛擋掉）
     if (p === "/privacy" || p === "/terms") p += ".html";
     let base = CLIENT_DIR, rel = p;
     if (p.startsWith("/shared/")) { base = SHARED_DIR; rel = p.slice("/shared".length); }
@@ -137,7 +138,7 @@ function readJson(req, limit) {
   });
 }
 async function handleApi(req, res, pathname) {
-  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" || pathname === "/api/adv/clear" ? 512 * 1024 : 4096);
+  const body = await readJson(req, pathname === "/api/score" || pathname === "/api/share" || pathname === "/api/quest/clear" ? 512 * 1024 : 4096);
   if (body === "too-big") { res.writeHead(413, { Connection: "close" }); res.end(); res.on("finish", () => req.socket.destroy()); return; }
   if (!body || typeof body !== "object") return json(res, 400, { error: "格式不對" });
   const user = currentUser(req);
@@ -157,7 +158,7 @@ async function handleApi(req, res, pathname) {
     if (pathname === "/api/run") { recordRun(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/score") return handleScore(res, body, user);
-    const adv = { "/api/adv/clear": advClear, "/api/adv/buy": advBuy, "/api/adv/wear": advWear }[pathname];
+    const adv = { "/api/quest/clear": advClear, "/api/quest/buy": advBuy, "/api/quest/wear": advWear }[pathname];
     if (adv) { const r = adv(user, body); return r.error ? json(res, r.status || 400, { error: r.error }) : json(res, 200, r); }
     if (pathname === "/api/share") return handleShareCreate(res, body, user);
     const ev = /^\/api\/share\/([0-9A-Za-z]{8})\/(accept|win|lose)$/.exec(pathname);

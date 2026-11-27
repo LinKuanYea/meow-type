@@ -1,7 +1,7 @@
 // 冒險模式（伺服器）：過關驗算、星星、小魚乾、裝扮。進度只存登入的人；沒登入只回傳這次的星星。
 import { dbh } from "./stats.js";
 import { RULES, replay } from "../shared/judge.js";
-import { LEVELS, starsOf, fishFor, unlocked, FISH } from "../shared/adventure.js";
+import { LEVELS, starsOf, fishFor, unlocked, FISH } from "../shared/quest.js";
 import { ITEM, ITEMS, SLOTS, cleanOutfit } from "../shared/items.js";
 
 export function initAdventure() {

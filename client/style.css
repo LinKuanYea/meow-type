@@ -209,8 +209,8 @@ table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{bor
 .nickrule{flex-basis:100%;margin:0;font-size:13px;color:var(--todo)}.nickrule a{color:var(--gin)}
 .msg.err{background:var(--badbg);color:var(--ink);padding:10px 14px;border-radius:10px;margin-bottom:12px}
 /* ---------- 冒險模式 ---------- */
-.advtop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.advlink{background:var(--gin);color:#fff}
+.topbtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.questlink{background:var(--gin);color:#fff}
 .fish{font:400 22px/1 "DotGothic16",monospace;color:var(--gin);padding:0 6px}
 .fish[hidden]{display:none}
 .islands{margin:18px 0 6px;flex-wrap:wrap}
@@ -231,7 +231,7 @@ table.pol{width:100%;border-collapse:collapse;font-size:15px}.pol th,.pol td{bor
 .playhead{display:flex;align-items:center;gap:14px;margin:14px 0 8px}
 .playhead h2{margin:0;font-size:22px}
 .arena{width:100%;aspect-ratio:960/300;display:block;border-radius:14px;border:2px solid var(--line);image-rendering:pixelated;background:#cfeaf6}
-.advres .bigstars{font-size:46px;line-height:1;color:#e8a000;letter-spacing:6px;margin:4px 0}
+.questres .bigstars{font-size:46px;line-height:1;color:#e8a000;letter-spacing:6px;margin:4px 0}
 .gain{font-weight:700;color:var(--gin);font-size:18px}
 .drop{display:flex;align-items:center;gap:14px;border:2px dashed var(--gin);border-radius:12px;padding:8px 14px;margin:12px 0}
 .drop canvas{image-rendering:pixelated;width:120px;height:105px}
