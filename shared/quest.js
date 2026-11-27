@@ -51,6 +51,50 @@ export const ISLANDS = [
           { id: "cpp-3-4", name: "Boss：福利社店長", parts: [{ code: "cpp-shop" }], target: 20, learn: "cpp-shop", big: true, drop: "hat-crown", boss: { name: "福利社店長", glyph: "if", color: "#d65a5a" } },
         ],
       },
+      {
+        id: "cpp-4", name: "第 4 章　條件迴圈", unit: "Conditional Loop", login: true,
+        levels: [
+          { id: "cpp-4-1", name: "while 的樣子", parts: [{ lines: ["int hp = 100;", "while (hp > 0) {", "hp = hp - atk;", "cout << \"hp = \" << hp << endl;"] }], target: 20, boss: { name: "迴圈陀螺", glyph: "while", color: "#5aa9e6" } },
+          { id: "cpp-4-2", name: "換瓶子", parts: [{ lines: ["coke = money / 27;", "bottle = coke;", "while (bottle >= 4) {", "bottle = bottle - 4;", "coke = coke + 1;", "bottle = bottle + 1;", "money = money % 27;"] }], target: 20, boss: { name: "空瓶怪", glyph: "/27", color: "#7cc576" } },
+          { id: "cpp-4-3", name: "魔王勇者", parts: [{ code: "cpp-boss" }], target: 20, learn: "cpp-boss", boss: { name: "魔王", glyph: "hp", color: "#8f7cd6" } },
+          { id: "cpp-4-4", name: "肥宅快樂水（瓶子）", parts: [{ code: "cpp-coke" }], target: 20, learn: "cpp-coke", boss: { name: "可樂瓶怪", glyph: "%4", color: "#e6845a" } },
+          { id: "cpp-4-5", name: "質數判斷", parts: [{ code: "cpp-prime" }], target: 20, learn: "cpp-prime", boss: { name: "質數守門員", glyph: "break", color: "#9aa0b5" } },
+          { id: "cpp-4-6", name: "五數最大值", parts: [{ code: "cpp-max5" }], target: 20, learn: "cpp-max5", boss: { name: "最大值熊", glyph: ">", color: "#e6a35a" } },
+          { id: "cpp-4-7", name: "Boss：快樂水大魔王", parts: [{ code: "cpp-coke2" }], target: 20, learn: "cpp-coke2", big: true, drop: "neck-bell", boss: { name: "快樂水大魔王", glyph: "||", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "cpp-5", name: "第 5 章　計數迴圈", unit: "Counting Loop", login: true,
+        levels: [
+          { id: "cpp-5-1", name: "for 的樣子", parts: [{ lines: ["for (int t = 2; t <= N-1; t = t + 1) {", "for (int m = 0; m <= a-1; m = m + 1) {", "for (int n = 0; n <= b-1; n = n + 1) {", "for (int t = 1; t <= N; t = t + 1) {", "for (int t = 1; t <= n-1; t = t + 1) {"] }], target: 22, boss: { name: "range 蜈蚣", glyph: "for", color: "#7cc576" } },
+          { id: "cpp-5-2", name: "for 迴圈裡面", parts: [{ lines: ["cout << \"\\n\";", "string S;", "cout << S;", "int d = a2 - a1;", "cout << a;", "a = a + d;"] }], target: 22, boss: { name: "加一蟲", glyph: "+1", color: "#5aa9e6" } },
+          { id: "cpp-5-3", name: "字串重複", parts: [{ code: "cpp-repeat" }], target: 22, learn: "cpp-repeat", boss: { name: "複製蟲", glyph: "×N", color: "#8f7cd6" } },
+          { id: "cpp-5-4", name: "等差數列", parts: [{ code: "cpp-seq" }], target: 22, learn: "cpp-seq", boss: { name: "公差蛇", glyph: "+d", color: "#e6a35a" } },
+          { id: "cpp-5-5", name: "Boss：格子點巨人", parts: [{ code: "cpp-grid" }], target: 22, learn: "cpp-grid", big: true, drop: "back-wings", boss: { name: "格子點巨人", glyph: "#", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "cpp-6", name: "第 6 章　陣列與搜尋", unit: "Array and Search", login: true,
+        levels: [
+          { id: "cpp-6-1", name: "陣列的樣子", parts: [{ lines: ["int vote[7] = {0};", "vote[a] = vote[a] + 1;", "int score[7];", "int num[n];", "int ans = -1;"] }], target: 22, boss: { name: "中括號蟹", glyph: "[]", color: "#5aa9e6" } },
+          { id: "cpp-6-2", name: "找最大最小", parts: [{ lines: ["for (int i = 0; i <= 6; i = i + 1) {", "int max, min = score[0];", "if (score[i] > max) {", "if (score[i] < min) {", "float average = 0;", "average = (average - max - min)/5.0;"] }], target: 22, boss: { name: "最大值熊", glyph: "max", color: "#e6a35a" } },
+          { id: "cpp-6-3", name: "搜尋", parts: [{ lines: ["if (num[i] == x) {", "ans = i + 1;", "if (ans != -1) {", "int ming = 1;", "if (scores[i] > x) {", "if (scores[i] == x) {", "if (found) {"] }], target: 22, boss: { name: "搜尋貓頭鷹", glyph: "==", color: "#7cc576" } },
+          { id: "cpp-6-4", name: "骰子點數統計", parts: [{ code: "cpp-dice" }], target: 22, learn: "cpp-dice", boss: { name: "骰子怪", glyph: "1~6", color: "#8f7cd6" } },
+          { id: "cpp-6-5", name: "抽獎箱", parts: [{ code: "cpp-lottery" }], target: 22, learn: "cpp-lottery", boss: { name: "抽獎箱怪", glyph: "?", color: "#e6845a" } },
+          { id: "cpp-6-6", name: "我是第幾名", parts: [{ code: "cpp-rank" }], target: 22, learn: "cpp-rank", boss: { name: "名次狐狸", glyph: "#1", color: "#9aa0b5" } },
+          { id: "cpp-6-7", name: "Boss：公平成績裁判", parts: [{ code: "cpp-fair" }], target: 22, learn: "cpp-fair", big: true, drop: "hat-chef", boss: { name: "公平成績裁判", glyph: "avg", color: "#d65a5a" } },
+        ],
+      },
+      {
+        id: "cpp-7", name: "第 7 章　排序", unit: "Sort", login: true,
+        levels: [
+          { id: "cpp-7-1", name: "二分搜尋的樣子", parts: [{ lines: ["int left = 0, right = n-1;", "while (right - left >= 0) {", "int mid = (left + right) / 2;", "if (nums[mid] == x) {", "else if (nums[mid] < x) {", "if (!found) {"] }], target: 24, boss: { name: "二分刀魚", glyph: "mid", color: "#5aa9e6" } },
+          { id: "cpp-7-2", name: "交換", parts: [{ lines: ["for (int i = 0; i <= n-2; i = i + 1) {", "if (nums[i] > nums[i+1]) {", "int wang = nums[i];", "nums[i] = nums[i+1];", "nums[i+1] = wang;", "for (int i = 0; i <= n-1; i = i + 1) {"] }], target: 24, boss: { name: "交換螃蟹", glyph: "⇄", color: "#7cc576" } },
+          { id: "cpp-7-3", name: "氣泡排序法", parts: [{ code: "cpp-bubble" }], target: 24, learn: "cpp-bubble", boss: { name: "泡泡怪", glyph: "○", color: "#8f7cd6" } },
+          { id: "cpp-7-4", name: "二分搜尋實驗 A", parts: [{ code: "cpp-bsearch" }], target: 24, learn: "cpp-bsearch", boss: { name: "追蹤蝙蝠", glyph: "log", color: "#e6a35a" } },
+          { id: "cpp-7-5", name: "Boss：鳳新圖書館長", parts: [{ code: "cpp-library" }], target: 24, learn: "cpp-library", big: true, drop: "face-patch", boss: { name: "圖書館長", glyph: "sort", color: "#d65a5a" } },
+        ],
+      },
     ],
   },
   {

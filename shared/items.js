@@ -19,6 +19,8 @@ export const ITEMS = [
     art: ["............y...", "..........bbbbb.", "..........yyyyy."] },
   { id: "hat-headband", slot: "hat", name: "for 頭帶", from: "py-4-6", y: 3, pal: { r: "#d64545", w: "#ffffff" },
     art: ["..........rrwrrr", "........rr......"] },
+  { id: "hat-chef", slot: "hat", name: "陣列廚師帽", from: "cpp-6-7", y: 0, pal: { w: "#ffffff", g: "#d9d9e0" },
+    art: ["..........wwwww.", ".........wwwwwww", "..........ggggg."] },
   { id: "hat-crown", slot: "hat", name: "if 皇冠", from: "cpp-3-4", y: 0, pal: { y: "#f5c542", r: "#d64545", d: "#b8860b" },
     art: ["..........y.y.y.", "..........yyyyy.", "..........dyryd."] },
   // 臉
@@ -28,6 +30,8 @@ export const ITEMS = [
     art: ["...........ggggg", "...........g.g.g"] },
   { id: "face-monocle", slot: "face", name: "while 單眼鏡", from: "py-3-6", y: 4, pal: { g: "#c9a227" },
     art: ["..............g.", ".............g.g", "..............g.", "...............g"] },
+  { id: "face-patch", slot: "face", name: "排序眼罩", from: "cpp-7-5", y: 4, pal: { d: "#151515" },
+    art: ["..........dddddd", ".............ddd"] },
   // 脖子
   { id: "neck-red", slot: "neck", name: "紅圍巾", price: 30, y: 7, pal: { s: "#d64545", t: "#a32f2f" },
     art: ["..........ssssss", ".........tt....."] },
@@ -35,11 +39,15 @@ export const ITEMS = [
     art: ["..........ssssss", ".........tt....."] },
   { id: "neck-snake", slot: "neck", name: "小蛇圍巾", from: "py-2-6", y: 7, pal: { g: "#4caf50", d: "#2e7d32", e: "#111111" },
     art: ["..........gdgdge", ".........gg....."] },
+  { id: "neck-bell", slot: "neck", name: "while 鈴鐺項圈", from: "cpp-4-7", y: 7, pal: { r: "#d64545", y: "#f5c542", d: "#b8860b" },
+    art: ["..........rrrrrr", "............yd.."] },
   // 背後
   { id: "back-cout", slot: "back", name: "cout 斗篷", from: "cpp-1-5", y: 6, pal: { c: "#c0392b", d: "#8e2a20", y: "#f5c542" },
     art: ["....ccccc.......", "...cccccccc.....", "..ccycyccd......", ".cccdccd........", "ccd............."] },
   { id: "back-bag", slot: "back", name: "list 背包", from: "py-5-5", y: 6, pal: { b: "#3b6fb5", d: "#2a4e9a", y: "#f5c542" },
     art: ["....bbbb........", "...bdyydb.......", "...bbbbbb.......", "...bdbbdb......."] },
+  { id: "back-wings", slot: "back", name: "for 迴圈翅膀", from: "cpp-5-5", y: 4, pal: { w: "#ffffff", g: "#c9c9d6" },
+    art: [".....ww.........", "....wwgw........", "...wwwgww.......", "....wwww........"] },
 ];
 export const ITEM = new Map(ITEMS.map((x) => [x.id, x]));
 export const DEFAULT_OUTFIT = { fur: "fur-orange" };
