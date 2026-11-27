@@ -4,7 +4,6 @@ import { unitOf } from "/shared/judge.js";
 import { esc } from "/shared/analyze.js";
 import { drawCat, PAL } from "/cat.js";
 
-const RULE = { block: "擋下", back: "要倒退修", free: "可以帶錯" };
 export const setText = (d) => `${CAT_NAME[d.c]}・${LEN_NAME[d.l]}・${d.m === "t60" ? "1 分鐘" : "打完一題"}`;
 const dateText = (ts) => { const t = new Date(ts); return `${t.getFullYear()}/${t.getMonth() + 1}/${t.getDate()}`; };
 
@@ -37,7 +36,7 @@ export async function drawResultImage(d) {
   g.fillStyle = "#2a1d14"; g.font = `700 34px ${SANS}`;
   g.fillText(`${d.name}　${setText(d)}`, 230, 92, 900);
   g.font = `400 24px ${SANS}`; g.fillStyle = "#5b4636";
-  g.fillText(`打錯時：${RULE[d.rule] || ""}　${dateText(d.ts || Date.now())}`, 232, 130);
+  g.fillText(dateText(d.ts || Date.now()), 232, 130);
   // 大數字
   g.fillStyle = "#2a1d14"; g.font = `400 168px ${PIX}`;
   const sp = String(Math.round(d.speed));

@@ -7,11 +7,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CATS, LENS, CAT_NAME, LEN_NAME, textOf } from "../shared/bank.js";
-import { RULES, replay, unitOf } from "../shared/judge.js";
+import { replay, unitOf } from "../shared/judge.js";
 import { handleAdmin } from "./admin.js";
-import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink } from "./quest.js";
+import { initAdventure, advState, advClear, advBuy, advWear, newsOverview, getNews, newsBoard, initVlinks, createVlink, getVlink, RULE } from "./quest.js";
 import { loginEnabled, currentUser, handleAuth, logout, changeNick, nickNextChange } from "./auth.js";
-import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId } from "./stats.js";
+import { initStats, history, recordVisit, recordRun, recordLearn, recordScore, board, boards, createShare, getShare, shareEvent, cleanId, dropOtherRuleScores } from "./stats.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLIENT_DIR = path.join(ROOT, "client");
@@ -28,6 +28,7 @@ const APP_BUILT = String(process.env.APP_BUILT || "").replace(/[^0-9/: -]/g, "")
 const VERSION_LABEL = `v${PKG_VERSION}（${APP_VERSION}${APP_BUILT ? `・${APP_BUILT}` : ""}）`;
 console.log(`喵打 ${VERSION_LABEL}`);
 initStats(process.env.STATS_DB || path.join(ROOT, "data", "stats.db"));
+dropOtherRuleScores();
 initAdventure();
 initVlinks();
 
@@ -201,7 +202,7 @@ function verifyRun(b, { minAcc, minCorrect, what }) {
   if (!cid) return { error: "格式不對" };
   if (!name) return { error: "先填一個暱稱" };
   if (badName(name)) return { error: "暱稱有不適合的字，換一個吧" };
-  if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m) || !RULES.includes(b.rule)) return { error: "格式不對" };
+  if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m) || b.rule !== RULE) return { error: "格式不對" };
   const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];
   if (!specs.length || (b.m === "full" && specs.length !== 1) || specs.some((x) => !x || x.c !== b.c || x.l !== b.l)) return { error: "題目對不上" };
   const texts = specs.map(textOf);

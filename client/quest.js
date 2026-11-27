@@ -27,7 +27,7 @@ async function api(path, body) {
 }
 let tt;
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(tt); tt = setTimeout(() => t.classList.remove("show"), 2200); }
-const rule = () => { const r = store.get("mt-settings", {}).rule; return ["block", "back", "free"].includes(r) ? r : "back"; };
+const rule = () => "back"; // 打錯時一律要倒退修
 
 /* ---------- 進度：登入的人存在伺服器；沒登入只能玩第 1 章，星星存在這台電腦 ---------- */
 const ST = { login: false, fish: 0, stars: {}, best: {}, owned: [], outfit: { ...DEFAULT_OUTFIT } };

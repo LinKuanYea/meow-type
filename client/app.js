@@ -32,7 +32,8 @@ function post(path, body) {
     .then((r) => (r.status === 204 ? {} : r.json())).catch(() => null);
 }
 
-const S = Object.assign({ cat: "cpp", len: "para", mode: "full", rule: "back", unit: "" }, store.get("mt-settings", {}));
+// 打錯時一律「要倒退修」（v0.13 起只剩這一種，林老師 11-27 決定）
+const S = Object.assign({ cat: "cpp", len: "para", mode: "full", unit: "" }, store.get("mt-settings", {}), { rule: "back" });
 const isCode = () => S.cat === "cpp" || S.cat === "py";
 const timed = () => S.mode === "t60" && !R.drill;
 const txt = $("#txt"), ta = $("#ta"), box = $("#box"), comp = $("#comp");
@@ -265,13 +266,12 @@ function syncNickFields() {
 /* ---------- 排行榜 ---------- */
 let per = store.get("mt-board-per", "day");
 let scope = store.get("mt-board-scope", "mine"); // mine＝目前的設定；all＝所有排行
-const RN = { block: "擋下", back: "倒退修", free: "帶錯" };
 const setName = (c, l, m) => `${CAT_NAME[c]}・${LEN_NAME[l]}・${m === "t60" ? "1 分鐘" : "打完一題"}`;
 let boardRows = []; // 給「挑戰他」按鈕用
 function boardTable(rows, c, l, m) {
-  return `<table class="lb"><thead><tr><th>名次</th><th>暱稱</th><th class="n">速度（${unitOf(c)}）</th><th class="n">正確率</th><th>打錯時</th><th><span class="sr">挑戰</span></th></tr></thead><tbody>${rows.map((r, i) => {
+  return `<table class="lb"><thead><tr><th>名次</th><th>暱稱</th><th class="n">速度（${unitOf(c)}）</th><th class="n">正確率</th><th><span class="sr">挑戰</span></th></tr></thead><tbody>${rows.map((r, i) => {
     const k = boardRows.push({ ...r, c, l, m }) - 1;
-    return `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}${r.login ? ' <span class="okb" title="已用 Google 登入">✓</span>' : ""}${r.me ? "（你）" : ""}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td><td>${RN[r.rule] || ""}</td>`
+    return `<tr class="${r.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(r.name)}${r.login ? ' <span class="okb" title="已用 Google 登入">✓</span>' : ""}${r.me ? "（你）" : ""}</td><td class="n">${Math.round(r.speed)}</td><td class="n">${Math.round(r.acc * 100)}%</td>`
       + `<td class="ch"><button type="button" class="chal" data-k="${k}">${r.me ? "挑戰自己" : "挑戰他"}</button></td></tr>`;
   }).join("")}</tbody></table>`;
 }
@@ -305,7 +305,7 @@ $("#blist").addEventListener("click", (e) => {
 /* ---------- 挑戰：用跟對方一樣的設定打，跑道上的灰貓換成對方的速度 ---------- */
 let rival = null; // { name, speed, c, l, m, rule }
 function challenge(r) {
-  Object.assign(S, { cat: r.c, len: r.l, mode: r.m, rule: r.rule, unit: "" });
+  Object.assign(S, { cat: r.c, len: r.l, mode: r.m, unit: "" });
   store.set("mt-settings", S); syncSeg(); syncUnit();
   // 有存題目就打對方那一題（1 分鐘模式照對方的題目順序）；舊成績沒存題目就隨機出
   const specs = Array.isArray(r.specs) && r.specs.length && r.specs.every((x) => x && x.c === r.c && x.l === r.l && textOf(x)) ? r.specs : null;
@@ -318,7 +318,7 @@ function rivalBar() {
   const bar = $("#rival");
   if (!rival) { bar.hidden = true; return; }
   bar.hidden = false;
-  bar.querySelector("span").textContent = `${rival.me ? "挑戰自己的紀錄" : `挑戰 ${rival.name}`}：${Math.round(rival.speed)} ${unitOf(rival.c)}・${setName(rival.c, rival.l, rival.m)}・打錯時${RN[S.rule]}`;
+  bar.querySelector("span").textContent = `${rival.me ? "挑戰自己的紀錄" : `挑戰 ${rival.name}`}：${Math.round(rival.speed)} ${unitOf(rival.c)}・${setName(rival.c, rival.l, rival.m)}`;
 }
 $("#rivalOff").addEventListener("click", () => { rival = null; newRun(); });
 
@@ -332,7 +332,6 @@ document.querySelectorAll(".opts .seg").forEach((g) => g.addEventListener("click
   const b = e.target.closest("button"); if (!b || S[g.dataset.k] === b.dataset.v) return;
   S[g.dataset.k] = b.dataset.v; store.set("mt-settings", S); syncSeg(); syncUnit();
   rival = null;
-  if (g.dataset.k === "rule" && R && !R.ty.started) { R.ty.rule = S.rule; ta.focus(); return; }
   newRun(); loadBoard();
 }));
 addEventListener("resize", () => { if (R) { paint(); updLive(); } });
@@ -381,7 +380,7 @@ async function openChallenge() {
   $("#chalGo").onclick = () => {
     box.hidden = true;
     post(`/api/share/${sh.id}/accept`, {});
-    Object.assign(S, { cat: sh.c, len: sh.l, mode: sh.m, rule: sh.rule, unit: "" });
+    Object.assign(S, { cat: sh.c, len: sh.l, mode: sh.m, unit: "" });
     store.set("mt-settings", S); syncSeg(); syncUnit();
     rival = { name: sh.name, speed: sh.speed, c: sh.c, l: sh.l, m: sh.m, share: sh.id, specs: sh.specs };
     newRun(null, false, { ...sh.specs[0] }); loadBoard();

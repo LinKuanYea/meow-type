@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dbh, getSetting, setSetting } from "./stats.js";
 import { NEWS_ID, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
-import { RULES, replay } from "../shared/judge.js";
+import { replay } from "../shared/judge.js";
+// 打錯時的規則只剩「要倒退修」（林老師 11-27 決定）；judge.js 仍認得三種，給舊資料用
+export const RULE = "back";
 import { LEVELS, starsOf, fishFor, unlocked, FISH } from "../shared/quest.js";
 import { ITEM, ITEMS, SLOTS, cleanOutfit } from "../shared/items.js";
 
@@ -88,7 +90,7 @@ export function advState(user) {
 /** 過關：重播按鍵紀錄算出星星；登入的人記進度、發小魚乾和掉落的裝扮 */
 export function advClear(user, b) {
   const lv = levelOf(b.level);
-  if (!lv || !RULES.includes(b.rule)) return { status: 400, error: "格式不對" };
+  if (!lv || b.rule !== RULE) return { status: 400, error: "格式不對" };
   if (lv.login && !user) return { status: 401, error: "這一章要登入才能玩" };
   const db = dbh();
   const stars0 = user ? starMap(user.id) : {};
@@ -165,7 +167,7 @@ export function initVlinks() {
   dbh().exec("CREATE TABLE IF NOT EXISTS vlinks (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, user_id INTEGER, payload TEXT NOT NULL)");
 }
 export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, unitOf }) {
-  if (!RULES.includes(b.rule) || !Array.isArray(b.events)) return { status: 400, error: "格式不對" };
+  if (b.rule !== RULE || !Array.isArray(b.events)) return { status: 400, error: "格式不對" };
   let p;
   if (b.kind === "quest") {
     const lv = levelOf(b.level);

@@ -255,6 +255,7 @@ try {
   const s3 = await (await postJ("/api/score", { ...body, cid: "c".repeat(24), name: "機器人", events: bot, speed: replay({ texts: [text], rule: "back", cat: "cpp", events: bot }).sum.speed })).json();
   ok(s3.ok && s3.flagged, "機器人成績：標成可疑");
   eq((await (await get(`/api/board?c=cpp&l=para&m=full&p=all`)).json()).length, 1, "可疑成績不上榜");
+  eq((await postJ("/api/score", { ...body, rule: "free" })).status, 400, "打錯規則只剩要倒退修：其他規則不收");
   const s4 = await postJ("/api/score", { ...body, speed: 999 }); ok((await s4.json()).flagged, "前端報的速度和驗算不同：可疑");
   eq((await postJ("/api/score", { ...body, name: "幹你" })).status, 400, "不適合的暱稱");
   // 分享挑戰
@@ -412,6 +413,7 @@ try {
   const xA0 = await (await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") })).json();
   ok(xA0.ok && xA0.stars === 3 && xA0.fish === 0, "沒登入也能玩第 1 章（不給小魚乾） " + JSON.stringify(xA0));
   eq((await xAdvpost("/api/quest/clear", { level: "cpp-2-1", rule: "back", events: xFast("cpp-2-1") })).status, 401, "第 2 章要登入");
+  eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "block", events: xFast("cpp-1-1") })).status, 400, "冒險模式也只收要倒退修");
   eq((await xAdvpost("/api/quest/clear", { level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1").slice(0, 5) })).status, 400, "沒打完不算");
   const xAl3 = await fetch(base + "/auth/fake?sub=adv-1&email=adv@example.com", { redirect: "manual" });
   const XAV = { Cookie: "mt_sess=" + /mt_sess=([^;]+)/.exec(xAl3.headers.get("set-cookie"))[1] };

@@ -78,7 +78,7 @@ export function tips(A, { cat, rule, pastes = 0, ime = 0 }) {
   const kn = A.K.length;
   if (A.backs && kn && A.backs / kn > 0.12) L.push([`倒退鍵用了 ${A.backs} 次`, `大約每 ${Math.round(kn / A.backs)} 個字就刪一次，先放慢一點、打準，速度自然會上來。`]);
   if (A.first > 0 && A.ms > 15000 && A.last < A.first * 0.75) L.push([`後段掉速 ${Math.round((1 - A.last / A.first) * 100)}%`, "前面打得快、後面慢下來，可能是累了或越打越緊張。練習時試著用穩定的節奏打完。"]);
-  if (A.acc < 0.9) L.push([`正確率 ${Math.round(A.acc * 100)}%`, "先求準再求快：正確率到 95% 以上再加速。" + (rule === "free" ? "可以試試「要倒退修」模式。" : "")]);
+  if (A.acc < 0.9) L.push([`正確率 ${Math.round(A.acc * 100)}%`, "先求準再求快：正確率到 95% 以上再加速。"]);
   else if (A.acc >= 0.97 && kn > 20 && !L.length) L.push(["又快又準", "正確率很高，下一次可以試著加快節奏，或換更長的題目。"]);
   return L.slice(0, 5);
 }

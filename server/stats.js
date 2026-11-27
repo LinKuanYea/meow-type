@@ -235,3 +235,10 @@ export function renderStatsBody() {
       r.flag ? "可疑：" + r.flag.split(",").map((f) => FLAG[f] || esc(f)).join("、") : "上榜"]))}</div>
 `;
 }
+
+/** v0.13：打錯時的規則只剩「要倒退修」，其他兩種規則的排行榜成績刪掉（林老師 11-27 決定）。每次啟動都跑，沒有就不動。 */
+export function dropOtherRuleScores() {
+  const n = db.prepare("DELETE FROM scores WHERE rule <> 'back'").run().changes;
+  if (n) console.warn(`[排行榜] 刪除 ${n} 筆「擋下／可以帶錯」的成績（只留要倒退修）`);
+  return n;
+}
