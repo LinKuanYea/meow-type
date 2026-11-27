@@ -92,24 +92,30 @@ $("#chapters").addEventListener("click", (e) => {
 /* ---------- 每日新聞 ---------- */
 const fmtDate = (d) => { const [y, m, dd] = d.split("-").map(Number); return `${m} 月 ${dd} 日（${"日一二三四五六"[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]}）`; };
 async function renderNews() {
-  $("#mapHint").innerHTML = `每天一篇國際新聞（高中程度的英文改寫），打完學單字、答理解題。${STAR_RULE.replace(/速度達標/, `速度 ${NEWS_TARGET} WPM`)}。`
-    + (ST.login ? `當天打完：每顆新星 ${NEWS_FISH.today} 條小魚乾，連續 ${NEWS_FISH.streakMin} 天以上再加 ${NEWS_FISH.streakBonus} 條；以前的新聞每顆星 ${NEWS_FISH.history} 條。` : `<b>登入才能拿小魚乾、記連續天數。</b><button type="button" class="link dologin">用 Google 登入</button>`);
+  $("#mapHint").innerHTML = `每天 3 篇國際新聞短文（高中程度的英文改寫，每篇約 100 字），<b>打完任一篇就算完成今日任務</b>；打完學單字、答理解題。${STAR_RULE.replace(/速度達標/, `速度 ${NEWS_TARGET} WPM`)}。`
+    + (ST.login ? `當天的新聞每顆新星 ${NEWS_FISH.today} 條小魚乾（3 篇都可以拿），連續 ${NEWS_FISH.streakMin} 天以上再加 ${NEWS_FISH.streakBonus} 條；以前的新聞每顆星 ${NEWS_FISH.history} 條。` : `<b>登入才能拿小魚乾、記連續天數。</b><button type="button" class="link dologin">用 Google 登入</button>`);
   $("#chapters").innerHTML = '<p class="empty">載入中…</p>';
   const r = online ? await api("/api/news") : { error: "要連上伺服器" };
   if (island !== "news") return;
   if (r.error) { $("#chapters").innerHTML = `<p class="empty">${esc(r.error)}</p>`; return; }
-  const today = r.list.find((n) => n.date === r.today), rest = r.list.filter((n) => n !== today);
-  const card = (n, big) => `<button type="button" class="lvl news${big ? " big" : ""}${n.stars ? " done" : ""}" data-news="${n.date}">
-    <span class="lvn">${fmtDate(n.date)}・${esc(n.topic)}</span><span class="lvt">${esc(n.title)}</span><span class="lvs" aria-label="${n.stars} 顆星">${starsTxt(n.stars)}</span>${n.chars ? etaHTML({ id: "news-" + n.date, lang: "en", segs: new Array(n.chars > SEG_MAX * 1.2 ? Math.ceil(n.chars / SEG_MAX) : 1) }, null, n.chars) : ""}${big ? `<span class="go">${n.stars ? "再打一次" : "開始今日任務"} →</span>` : ""}</button>`;
-  $("#chapters").innerHTML = `<div class="chap"><h3>今日任務${ST.login && r.streak ? `<span class="streak">🔥 連續 ${r.streak} 天</span>` : ""}</h3>
-    ${today ? `<div class="today">${card(today, true)}<div class="board" id="nBoard"><p class="empty">排行榜載入中…</p></div></div>` : `<p class="empty">今天的新聞還沒出來（每天清晨更新），先玩以前的吧！</p>`}</div>
+  const todays = r.list.filter((n) => n.date === r.today), rest = r.list.filter((n) => n.date !== r.today);
+  const doneToday = todays.some((n) => n.stars > 0);
+  const card = (n, big, i) => `<button type="button" class="lvl news${big ? " big" : ""}${n.stars ? " done" : ""}" data-news="${n.key}">
+    <span class="lvn">${big && todays.length > 1 ? `第 ${i + 1} 篇` : fmtDate(n.date)}・${esc(n.topic)}</span><span class="lvt">${esc(n.title)}</span><span class="lvs" aria-label="${n.stars} 顆星">${starsTxt(n.stars)}</span>${n.chars ? etaHTML({ id: "news-" + n.key, lang: "en", segs: new Array(n.chars > SEG_MAX * 1.2 ? Math.ceil(n.chars / SEG_MAX) : 1) }, null, n.chars) : ""}${big ? `<span class="go">${n.stars ? "再打一次" : doneToday ? "再打一篇" : "開始今日任務"} →</span>` : ""}</button>`;
+  $("#chapters").innerHTML = `<div class="chap"><h3>今日任務${doneToday ? '<span class="ok">✓ 今天完成了</span>' : ""}${ST.login && r.streak ? `<span class="streak">🔥 連續 ${r.streak} 天</span>` : ""}</h3>
+    ${todays.length ? `<div class="today"><div class="tcards">${todays.map((n, i) => card(n, true, i)).join("")}</div><div class="board" id="nBoard"><p class="empty">排行榜載入中…</p></div></div>` : `<p class="empty">今天的新聞還沒出來（每天清晨更新），先玩以前的吧！</p>`}</div>
     ${rest.length ? `<div class="chap"><h3>以前的新聞</h3><ol class="lvls">${rest.map((n) => `<li>${card(n)}</li>`).join("")}</ol></div>` : ""}`;
-  if (today) {
-    const b = await api(`/api/news/${today.date}/board`);
-    const el = $("#nBoard"); if (!el) return;
-    el.innerHTML = `<h4>今天的排行榜</h4>` + (b.error || !b.length ? '<p class="empty">還沒有人打完，搶第一個！</p>'
+  if (todays.length) showBoard(todays, todays[0].key);
+}
+// 今天每篇各有排行榜，用分頁切換
+async function showBoard(todays, key) {
+  const el0 = $("#nBoard"); if (!el0) return;
+  const tabs = todays.length > 1 ? `<div class="btabs" role="group" aria-label="選文章">${todays.map((n, i) => `<button type="button" data-bkey="${n.key}" aria-pressed="${n.key === key}">第 ${i + 1} 篇</button>`).join("")}</div>` : "";
+  const b = await api(`/api/news/${key}/board`);
+  const el = $("#nBoard"); if (!el) return;
+  el.innerHTML = `<h4>今天的排行榜</h4>` + tabs + (b.error || !b.length ? '<p class="empty">還沒有人打完，搶第一個！</p>'
       : `<table class="lb"><tbody>${b.map((x, i) => `<tr class="${x.me ? "me" : ""}"><td class="rk">${i + 1}</td><td>${esc(x.name)}${x.me ? "（你）" : ""}</td><td class="n">${Math.round(x.speed)}</td><td class="n">${starsTxt(x.stars)}</td></tr>`).join("")}</tbody></table>`);
-  }
+  el.querySelectorAll("[data-bkey]").forEach((x) => x.addEventListener("click", () => showBoard(todays, x.dataset.bkey)));
 }
 async function playNews(date) {
   const n = await api("/api/news/" + date);

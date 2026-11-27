@@ -72,10 +72,10 @@ export const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/news") return json(res, 200, newsOverview(currentUser(req)));
     const vm = /^\/api\/vlink\/([0-9A-Za-z]{8})$/.exec(url.pathname);
     if (vm) { const v = getVlink(vm[1]); return v ? json(res, 200, v) : json(res, 404, { error: "這個影片連結不存在或已經過期（7 天）" }); }
-    const nm = /^\/api\/news\/(\d{4}-\d{2}-\d{2})(\/board)?$/.exec(url.pathname);
+    const nm = /^\/api\/news\/(\d{4}-\d{2}-\d{2}(?:-[1-9])?)(\/board)?$/.exec(url.pathname);
     if (nm) {
       const r = nm[2] ? newsBoard(nm[1], currentUser(req)) : getNews(nm[1]);
-      return r ? json(res, 200, r) : json(res, 404, { error: "找不到這一天的新聞" });
+      return r ? json(res, 200, r) : json(res, 404, { error: "找不到這篇新聞" });
     }
     if (url.pathname === "/api/me") {
       const u = currentUser(req);

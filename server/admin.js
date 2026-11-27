@@ -180,7 +180,7 @@ export async function handleAdmin(req, res, url) {
     }
     if (p === "/admin/news") {
       const f = await readForm(req);
-      const date = String(f?.get("date") || ""), act = f?.get("action");
+      const date = String(f?.get("key") || f?.get("date") || ""), act = f?.get("action"); // date：新聞的 key
       if (!getNews(date, true) || !["hide", "show"].includes(act)) { redirect(res, "/admin/news?m=bad"); return true; }
       setNewsHidden(date, act === "hide");
       console.warn(`[管理] 每日新聞 ${date}：${act === "hide" ? "下架" : "恢復"}`);
@@ -285,13 +285,13 @@ function newsPage() {
   const list = newsIndex(true), today = twDate();
   const stat = Object.fromEntries(dbh().prepare(`SELECT level, COUNT(*) n, COUNT(DISTINCT user_id) u, SUM(stars>0) ok, AVG(speed) sp FROM adv_runs WHERE level LIKE 'news-%' AND flag='' GROUP BY level`).all().map((r) => [r.level.slice(5), r]));
   return `<h1>每日新聞</h1>
-<p>每天清晨由 Claude 的排程工作找一則國際新聞、用自己的話改寫成高中程度的英文短文，推到 GitHub 後自動上線（不用核准）。內容有問題可以在這裡<b>下架</b>，學生就看不到那一天；資料還在，可以恢復。要修改內容請請 Claude 改 <code>content/news/日期.json</code>。</p>
+<p>每天清晨由 Claude 的排程工作找一則國際新聞，每天 3 篇、主題錯開，用自己的話改寫成高中程度的英文短文（每篇 80～120 字），推到 GitHub 後自動上線（不用核准）。內容有問題可以在這裡<b>下架</b>，學生就看不到那一篇；資料還在，可以恢復。要修改內容請 Claude 改 <code>content/news/日期-編號.json</code>。</p>
 <div class="wrap"><table><thead><tr><th>日期</th><th>標題</th><th>主題</th><th>過關次數</th><th>人數</th><th>過關率</th><th>平均速度</th><th>狀態</th><th></th></tr></thead><tbody>
-${list.map((n) => { const s = stat[n.date] || {}; const nw = getNews(n.date, true);
-    return `<tr${n.hidden ? ' class="bn"' : ""}><td>${n.date}${n.date === today ? "（今天）" : ""}</td><td>${esc(n.title)}<br><span class="n">${(nw?.sources || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}</span></td><td>${esc(n.topic)}</td>
+${list.map((n) => { const s = stat[n.key] || {}; const nw = getNews(n.key, true);
+    return `<tr${n.hidden ? ' class="bn"' : ""}><td>${n.key}${n.date === today ? "（今天）" : ""}</td><td>${esc(n.title)}<br><span class="n">${(nw?.sources || []).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}</span></td><td>${esc(n.topic)}</td>
     <td>${s.n || 0}</td><td>${s.u || 0}</td><td>${s.n ? pct(s.ok / s.n) : "—"}</td><td>${s.sp ? Math.round(s.sp) : "—"}</td>
     <td>${n.hidden ? '<span class="no">已下架</span>' : n.date > today ? "還沒到" : '<span class="ok">上線</span>'}</td>
-    <td><form method="post" action="/admin/news" class="inl"><input type="hidden" name="date" value="${n.date}"><input type="hidden" name="action" value="${n.hidden ? "show" : "hide"}"><button type="submit" class="small ${n.hidden ? "sec" : "warn"}">${n.hidden ? "恢復" : "下架"}</button></form></td></tr>`; }).join("")
+    <td><form method="post" action="/admin/news" class="inl"><input type="hidden" name="key" value="${n.key}"><input type="hidden" name="action" value="${n.hidden ? "show" : "hide"}"><button type="submit" class="small ${n.hidden ? "sec" : "warn"}">${n.hidden ? "恢復" : "下架"}</button></form></td></tr>`; }).join("")
   || '<tr><td colspan="9">還沒有新聞。</td></tr>'}</tbody></table></div>`;
 }
 

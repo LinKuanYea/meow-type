@@ -109,22 +109,25 @@ for (const [c, ls] of Object.entries(SRC)) {
 const NEWS_DIR = "content/news", NEWS_OUT = "shared/news";
 const news = {};
 const words = (t) => (t.match(/[A-Za-z0-9'-]+/g) || []).length;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const KEY = /^(\d{4}-\d{2}-\d{2})(-[1-9])?$/; // 2026-11-27（最早只有一篇）或 2026-11-28-1、-2、-3（每天 3 篇）
 for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filter((x) => x.endsWith(".json")).sort() : []) {
-  const where = `${NEWS_DIR}/${f}`, date = f.slice(0, -5);
+  const where = `${NEWS_DIR}/${f}`, key = f.slice(0, -5), km = KEY.exec(key), date = km ? km[1] : "", short = !!km?.[2];
   let n;
   try { n = JSON.parse(readFileSync(root + where, "utf8")); } catch (e) { err(where, "JSON 格式錯誤：" + e.message); continue; }
-  if (!DATE.test(date) || n.date !== date) err(where, "date 要跟檔名一樣（YYYY-MM-DD）");
+  if (!km || n.date !== date) err(where, "檔名要是 YYYY-MM-DD-編號.json，date 要跟檔名的日期一樣");
   if (typeof n.title !== "string" || !n.title.trim() || n.title.length > 60) err(where, "title：中文標題，60 字以內");
   if (typeof n.topic !== "string" || !n.topic.trim()) err(where, "缺 topic");
-  if (!Array.isArray(n.paras) || n.paras.length < 2 || n.paras.length > 5) err(where, "paras：2～5 段");
+  const [pMin, pMax] = short ? [1, 3] : [2, 5];
+  if (!Array.isArray(n.paras) || n.paras.length < pMin || n.paras.length > pMax) err(where, `paras：${pMin}～${pMax} 段`);
   for (const [i, t] of (n.paras || []).entries()) {
     if (typeof t !== "string" || !EN_OK.test(t)) err(`${where} 第 ${i + 1} 段`, `有不該出現的字元（彎引號、破折號、全形…）：${JSON.stringify(String(t).replace(/[A-Za-z0-9 .,;:!?'"()\-]/g, ""))}`);
     else if (/\s{2,}|^\s|\s$/.test(t)) err(`${where} 第 ${i + 1} 段`, "多餘的空白");
   }
   const wc = (n.paras || []).reduce((a, t) => a + words(String(t)), 0);
-  if (wc < 120 || wc > 280) err(where, `全文 ${wc} 字，要 120～280 字`);
-  if (!Array.isArray(n.vocab) || n.vocab.length < 5 || n.vocab.length > 12) err(where, "vocab：5～12 個");
+  const [wMin, wMax] = short ? [70, 140] : [120, 280]; // 短篇目標 80～120 字，留一點彈性
+  if (wc < wMin || wc > wMax) err(where, `全文 ${wc} 字，要 ${wMin}～${wMax} 字`);
+  const [vMin, vMax] = short ? [3, 8] : [5, 12];
+  if (!Array.isArray(n.vocab) || n.vocab.length < vMin || n.vocab.length > vMax) err(where, `vocab：${vMin}～${vMax} 個`);
   for (const [k, vb] of (n.vocab || []).entries()) {
     const w2 = `${where} vocab[${k}]`;
     if (!vb.w || !vb.zh || !POS.test(vb.pos || "") || ![1, 2, 3].includes(vb.lv)) err(w2, "要有 w、pos、zh、lv（1 國中、2 高中、3 進階）");
@@ -137,9 +140,18 @@ for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filte
     else if (new Set(q.options).size !== 4) err(w2, "選項重複");
   }
   if (!Array.isArray(n.sources) || !n.sources.length || n.sources.some((x) => !x.name || !/^https:\/\/[^\s"<>]+$/.test(x.url || ""))) err(where, "sources：至少 1 個 { name, url（https） }");
-  news[date] = { date, title: n.title, topic: n.topic, paras: n.paras, vocab: n.vocab, questions: n.questions, sources: n.sources };
+  news[key] = { key, date, title: n.title, topic: n.topic, paras: n.paras, vocab: n.vocab, questions: n.questions, sources: n.sources };
 }
-const newsIndex = Object.values(news).sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ date, title, topic, paras }) => ({ date, title, topic, chars: paras.reduce((x, t) => x + t.length, 0) }));
+// 同一天的主題要錯開
+const byDay = {};
+for (const n of Object.values(news)) (byDay[n.date] ||= []).push(n);
+for (const [d, ns] of Object.entries(byDay)) {
+  const t = ns.map((n) => String(n.topic).trim().toLowerCase());
+  if (new Set(t).size !== t.length) err(`${NEWS_DIR}/${d}`, `同一天的主題重複了：${ns.map((n) => n.topic).join("、")}`);
+}
+// 新的日期在前；同一天照編號
+const newsIndex = Object.values(news).sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.key < b.key ? -1 : 1))
+  .map(({ key, date, title, topic, paras }) => ({ key, date, title, topic, chars: paras.reduce((x, t) => x + t.length, 0) }));
 
 if (errs.length) {
   console.error("題庫檢查沒過：\n" + errs.map((e) => "  ✗ " + e).join("\n"));
@@ -149,7 +161,7 @@ const out = `// 由 scripts/build-text-bank.mjs 從 content/en、content/zh 產�
   `export const TEXT = ${JSON.stringify(bank, null, 0).replace(/\],"/g, '],\n"').replace(/\},\{/g, "},\n{")};\n`;
 const lockOut = JSON.stringify(newLock, null, 1) + "\n";
 const newsFiles = { "index.json": JSON.stringify(newsIndex) + "\n" };
-for (const n of Object.values(news)) newsFiles[n.date + ".json"] = JSON.stringify(n) + "\n";
+for (const n of Object.values(news)) newsFiles[n.key + ".json"] = JSON.stringify(n) + "\n";
 if (process.argv.includes("--check")) {
   const cur = existsSync(root + OUT) ? readFileSync(root + OUT, "utf8") : "";
   const curLock = existsSync(root + LOCK) ? readFileSync(root + LOCK, "utf8") : "";

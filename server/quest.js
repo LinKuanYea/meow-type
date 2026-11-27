@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dbh, getSetting, setSetting } from "./stats.js";
-import { NEWS_ID, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
+import { NEWS_ID, NEWS_KEY, keyDate, newsLevel, newsFishFor, streakOf, twDate } from "../shared/news.js";
 import { replay } from "../shared/judge.js";
 // 打錯時的規則只剩「要倒退修」（林老師 11-27 決定）；judge.js 仍認得三種，給舊資料用
 export const RULE = "back";
@@ -26,44 +26,47 @@ export function initAdventure() {
 }
 
 /* ---------- 每日新聞 ---------- */
-const NEWS_DIR = fileURLToPath(new URL("../shared/news/", import.meta.url));
+// NEWS_DIR 環境變數只給測試用（放測試用的新聞）
+const NEWS_DIR = process.env.NEWS_DIR ? process.env.NEWS_DIR.replace(/\/?$/, "/") : fileURLToPath(new URL("../shared/news/", import.meta.url));
 const newsCache = new Map();
 export const newsHidden = () => new Set(String(getSetting("news_hidden") || "").split(",").filter(Boolean));
 export function setNewsHidden(date, hide) {
-  const h = newsHidden(); if (hide) h.add(date); else h.delete(date);
+  const h = newsHidden(); if (hide) h.add(date); else h.delete(date); // date：新聞的 key（日期或日期-編號）
   setSetting("news_hidden", [...h].sort().join(","));
 }
-/** 讀一天的新聞；未來的日期、被管理員下架的、不存在的都回傳 null（admin＝管理頁要看全部） */
-export function getNews(date, admin = false) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return null;
-  if (!admin && (date > twDate() || newsHidden().has(date))) return null;
-  if (!newsCache.has(date)) {
-    const f = NEWS_DIR + date + ".json";
-    newsCache.set(date, existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : null);
+/** 讀一篇新聞（key＝日期或日期-編號）；未來的日期、被管理員下架的、不存在的都回傳 null（admin＝管理頁要看全部） */
+export function getNews(key, admin = false) {
+  if (!NEWS_KEY.test(key || "")) return null;
+  if (!admin && (keyDate(key) > twDate() || newsHidden().has(key))) return null;
+  if (!newsCache.has(key)) {
+    const f = NEWS_DIR + key + ".json";
+    newsCache.set(key, existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : null);
   }
-  return newsCache.get(date);
+  return newsCache.get(key);
 }
 export function newsIndex(admin = false) {
   let all = [];
   try { all = JSON.parse(readFileSync(NEWS_DIR + "index.json", "utf8")); } catch {}
   const today = twDate(), hid = newsHidden();
-  return admin ? all.map((n) => ({ ...n, hidden: hid.has(n.date) })) : all.filter((n) => n.date <= today && !hid.has(n.date));
+  all = all.map((n) => ({ ...n, key: n.key || n.date }));
+  all.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.key < b.key ? -1 : 1)); // 新的日期在前；同一天照編號
+  return admin ? all.map((n) => ({ ...n, hidden: hid.has(n.key) })) : all.filter((n) => n.date <= today && !hid.has(n.key));
 }
 /** 在新聞當天就過關的日期（算連續天數用） */
 function onTimeDates(uid) {
   return dbh().prepare("SELECT level, first_ts FROM adv WHERE user_id=? AND level LIKE 'news-%'").all(uid)
-    .map((r) => [r.level.slice(5), twDate(r.first_ts)]).filter(([d, t]) => d === t).map(([d]) => d);
+    .map((r) => [keyDate(r.level.slice(5)), twDate(r.first_ts)]).filter(([d, t]) => d === t).map(([d]) => d);
 }
 export function newsOverview(user) {
   const today = twDate(), list = newsIndex().slice(0, 60);
   const stars = user ? starMap(user.id) : {};
-  return { today, streak: user ? streakOf(onTimeDates(user.id), today) : 0, list: list.map((n) => ({ ...n, stars: stars["news-" + n.date] || 0 })) };
+  return { today, streak: user ? streakOf(onTimeDates(user.id), today) : 0, list: list.map((n) => ({ ...n, stars: stars["news-" + n.key] || 0 })) };
 }
 /** 某一天新聞的排行榜（登入的人，每人最好的一次） */
-export function newsBoard(date, user) {
-  if (!getNews(date)) return null;
+export function newsBoard(key, user) {
+  if (!getNews(key)) return null;
   return dbh().prepare(`SELECT u.id, COALESCE(u.nick, '（還沒取暱稱）') name, a.speed, a.acc, a.stars FROM adv a JOIN users u ON u.id = a.user_id
-    WHERE a.level=? AND a.stars>0 AND u.banned=0 ORDER BY a.speed DESC LIMIT 20`).all("news-" + date)
+    WHERE a.level=? AND a.stars>0 AND u.banned=0 ORDER BY a.speed DESC LIMIT 20`).all("news-" + key)
     .map((r) => ({ name: r.name, speed: r.speed, acc: r.acc, stars: r.stars, me: user?.id === r.id }));
 }
 const levelOf = (id) => { const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? withSegs(newsLevel(n)) : null; };
@@ -152,8 +155,9 @@ export function advClear(user, b) {
     const repToday = db.prepare("SELECT COUNT(*) n FROM adv_runs WHERE user_id=? AND ts>=? AND flag='' AND fish=?").get(user.id, todayStart(), FISH.replay).n;
     if (lv.news) {
       const today = twDate(now), isToday = lv.news.date === today;
-      const streak = streakOf([...onTimeDates(user.id), ...(isToday && stars > 0 ? [today] : [])], today);
-      out.fish = newsFishFor(isToday, prev, stars, repToday, streak, FISH.replay, FISH.replayPerDay);
+      const before = onTimeDates(user.id), hadToday = before.includes(today); // 今天已經有一篇過關了：連續天數的加碼只給一次
+      const streak = streakOf([...before, ...(isToday && stars > 0 ? [today] : [])], today);
+      out.fish = newsFishFor(isToday, prev, stars, repToday, hadToday ? 0 : streak, FISH.replay, FISH.replayPerDay);
       out.streak = streak;
     } else out.fish = fishFor(lv, prev, stars, repToday);
     if (stars > 0) {

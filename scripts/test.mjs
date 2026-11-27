@@ -1,6 +1,6 @@
 // 喵打測試：題庫、判定、驗算、伺服器 API。deploy.sh 會在新映像檔上跑這個，沒過就不換版本。
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync, readdirSync, copyFileSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -209,8 +209,23 @@ for (const c of ["en", "zh"]) for (const l of LENS) for (let n = 0; n < 50; n++)
 
 /* ---------- 伺服器 API ---------- */
 const dir = mkdtempSync(path.join(tmpdir(), "meow-type-test-"));
+// 測試用的新聞：正式的新聞加上「今天」的 3 篇短文
+const NT = twDate(), newsDir = path.join(dir, "news");
+mkdirSync(newsDir);
+for (const f of readdirSync(path.join(ROOT, "shared/news"))) copyFileSync(path.join(ROOT, "shared/news", f), path.join(newsDir, f));
+{
+  const idx = JSON.parse(readFileSync(path.join(newsDir, "index.json"), "utf8"));
+  const topics = ["科學", "運動", "環境"];
+  for (let k = 1; k <= 3; k++) {
+    const key = `${NT}-${k}`, paras = [`Test story number ${k} is short. Cats like to read the news every morning.`, `This is the second part of story ${k}. It has only a few words.`];
+    writeFileSync(path.join(newsDir, key + ".json"), JSON.stringify({ key, date: NT, title: "測試新聞 " + k, topic: topics[k - 1], paras,
+      vocab: [{ w: "morning", pos: "n.", zh: "早上", lv: 1 }], questions: [{ q: "Who reads?", options: ["Cats", "Dogs", "Fish", "Birds"], answer: 0, why: "貓" }], sources: [{ name: "Test", url: "https://example.com/" }] }));
+    idx.unshift({ key, date: NT, title: "測試新聞 " + k, topic: topics[k - 1], chars: paras.join("").length });
+  }
+  writeFileSync(path.join(newsDir, "index.json"), JSON.stringify(idx));
+}
 const srv = spawn(process.execPath, ["--disable-warning=ExperimentalWarning", path.join(ROOT, "server/index.js")], {
-  env: { ...process.env, PORT: "0", HOST: "127.0.0.1", STATS_DB: path.join(dir, "t.db"), STATS_PASSWORD: "pw", APP_VERSION: "abc1234", AUTH_FAKE: "1", NODE_ENV: "test" }, stdio: ["ignore", "pipe", "pipe"],
+  env: { ...process.env, PORT: "0", HOST: "127.0.0.1", STATS_DB: path.join(dir, "t.db"), NEWS_DIR: newsDir, STATS_PASSWORD: "pw", APP_VERSION: "abc1234", AUTH_FAKE: "1", NODE_ENV: "test" }, stdio: ["ignore", "pipe", "pipe"],
 });
 let log = "";
 srv.stderr.on("data", (d) => { log += d; });
@@ -411,6 +426,10 @@ try {
   eq((await get("/api/news/2026-11-27")).status, 404, "下架後學生看不到");
   ok((await post("/admin/news", "date=2026-11-27&action=show", AC2)).headers.get("location").includes("m=newsshow"), "恢復上架");
   eq((await get("/api/news/2026-11-27")).status, 200, "恢復後看得到");
+  ok((await post("/admin/news", `key=${NT}-3&action=hide`, AC2)).headers.get("location").includes("m=newshid"), "下架其中一篇");
+  ok((await get(`/api/news/${NT}-3`)).status === 404 && (await get(`/api/news/${NT}-2`)).status === 200, "下架一篇不影響同一天的其他篇");
+  ok(!(await (await fetch(base + "/api/news")).json()).list.some((n) => n.key === NT + "-3"), "列表也不顯示下架的那篇");
+  ok((await post("/admin/news", `key=${NT}-3&action=show`, AC2)).headers.get("location").includes("m=newsshow"), "恢復那一篇");
   await fetch(base + "/admin/logout", { method: "POST", headers: { ...O, ...AC2 }, redirect: "manual" });
   ok(!(await (await get("/admin", AC2)).text()).includes("上課檢查"), "管理登出");
   void host;
@@ -554,6 +573,22 @@ try {
   ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).avg.cpp > 0, "平均速度（估計時間用）");
   const nBoard = await (await fetch(base + "/api/news/2026-11-27/board", { headers: XAV })).json();
   ok(nBoard.length === 1 && nBoard[0].me && nBoard[0].stars === 3, "每日新聞排行榜");
+  // 每天 3 篇：打完任一篇就算今天完成，每篇各有排行榜
+  const nL2 = await (await fetch(base + "/api/news", { headers: XAV })).json();
+  const t3 = nL2.list.filter((n) => n.date === NT && n.key !== NT);
+  eq(t3.map((n) => n.key), [1, 2, 3].map((k) => `${NT}-${k}`), "今天有 3 篇（照編號）");
+  ok(t3.every((n) => n.stars === 0 && n.chars > 0), "每篇各自的星星、字數");
+  const n1 = await (await get(`/api/news/${NT}-1`)).json();
+  ok(n1.key === NT + "-1" && newsLevel(n1).id === `news-${NT}-1` && newsLevel(n1).news.date === NT, "讀一篇（日期-編號）");
+  eq([(await get(`/api/news/${NT}-0`)).status, (await get(`/api/news/${NT}-12`)).status, (await get(`/api/news/${NT}-4`)).status], [404, 404, 404], "編號不對、不存在");
+  const playOne = async (k, C) => { const lv = withSegs(newsLevel(await (await get(`/api/news/${NT}-${k}`)).json())); return playSegs(lv, C, 30 + k); };
+  const r1 = await playOne(1, XAV), r2 = await playOne(2, XAV);
+  ok(r1.ok && r1.stars === 3 && r2.ok && r2.stars === 3, "今天的第 1、2 篇都能打");
+  eq([r1.fish, r2.fish], [3 * NEWS_FISH.today, 3 * NEWS_FISH.today], "多打的那篇一樣有小魚乾（連續天數加碼一天只給一次）");
+  const nL3 = await (await fetch(base + "/api/news", { headers: XAV })).json();
+  ok(nL3.streak === 1 && nL3.list.find((n) => n.key === NT + "-2").stars === 3 && nL3.list.find((n) => n.key === NT + "-3").stars === 0, "同一天打很多篇，連續天數還是 1 天");
+  const nb2 = await (await fetch(base + `/api/news/${NT}-2/board`, { headers: XAV })).json(), nb3 = await (await fetch(base + `/api/news/${NT}-3/board`, { headers: XAV })).json();
+  ok(nb2.length === 1 && nb2[0].me && nb3.length === 0, "每篇各有排行榜");
   // 影片連結（電腦打完、手機掃 QR code 做影片）
   ok(["/qr.js", "/vidui.js", "/v.js"].every(Boolean) && (await get("/qr.js")).status === 200 && (await get("/vidui.js")).status === 200 && (await get("/v.js")).status === 200, "影片連結的程式");
   const vq = await (await xAdvpost("/api/vlink", { kind: "quest", level: "cpp-1-1", rule: "back", events: xFast("cpp-1-1") }, XAV)).json();
