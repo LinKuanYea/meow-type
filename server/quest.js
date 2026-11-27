@@ -7,7 +7,7 @@ import { NEWS_ID, newsLevel, newsFishFor, streakOf, twDate } from "../shared/new
 import { replay } from "../shared/judge.js";
 // 打錯時的規則只剩「要倒退修」（林老師 11-27 決定）；judge.js 仍認得三種，給舊資料用
 export const RULE = "back";
-import { LEVELS, starsOf, fishFor, unlocked, FISH } from "../shared/quest.js";
+import { LEVELS, starsOf, fishFor, unlocked, FISH, withSegs, mergeSums } from "../shared/quest.js";
 import { ITEM, ITEMS, SLOTS, cleanOutfit } from "../shared/items.js";
 
 export function initAdventure() {
@@ -17,6 +17,8 @@ export function initAdventure() {
     CREATE TABLE IF NOT EXISTS adv_runs (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, user_id INTEGER, level TEXT, stars INTEGER, speed REAL, acc REAL, ms INTEGER, fish INTEGER, flag TEXT NOT NULL DEFAULT '');
     CREATE TABLE IF NOT EXISTS items (user_id INTEGER NOT NULL, item TEXT NOT NULL, ts INTEGER NOT NULL, how TEXT, PRIMARY KEY (user_id, item));
     CREATE INDEX IF NOT EXISTS adv_runs_user ON adv_runs(user_id, ts);
+    CREATE TABLE IF NOT EXISTS adv_seg (user_id INTEGER NOT NULL, level TEXT NOT NULL, seg INTEGER NOT NULL, correct INTEGER, keys INTEGER, errs INTEGER, ms INTEGER, ts INTEGER NOT NULL,
+      PRIMARY KEY (user_id, level, seg));
   `);
   const has = (c) => dbh().prepare("PRAGMA table_info(users)").all().some((x) => x.name === c);
   if (!has("fish")) dbh().exec("ALTER TABLE users ADD COLUMN fish INTEGER NOT NULL DEFAULT 0");
@@ -64,7 +66,7 @@ export function newsBoard(date, user) {
     WHERE a.level=? AND a.stars>0 AND u.banned=0 ORDER BY a.speed DESC LIMIT 20`).all("news-" + date)
     .map((r) => ({ name: r.name, speed: r.speed, acc: r.acc, stars: r.stars, me: user?.id === r.id }));
 }
-const levelOf = (id) => { const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? newsLevel(n) : null; };
+const levelOf = (id) => { const m = NEWS_ID.exec(id || ""); if (!m) return LEVELS.get(id); const n = getNews(m[1]); return n ? withSegs(newsLevel(n)) : null; };
 
 const owned = (uid) => new Set(dbh().prepare("SELECT item FROM items WHERE user_id=?").all(uid).map((r) => r.item));
 const starMap = (uid) => Object.fromEntries(dbh().prepare("SELECT level, stars FROM adv WHERE user_id=?").all(uid).map((r) => [r.level, r.stars]));
@@ -84,7 +86,27 @@ export function advState(user) {
     stars: Object.fromEntries(rows.map((r) => [r.level, r.stars])),
     best: Object.fromEntries(rows.map((r) => [r.level, { speed: r.speed, acc: r.acc }])),
     owned: [...own], outfit: cleanOutfit(outfit, own),
+    segs: segProgress(user.id), avg: avgSpeed(user.id),
   };
+}
+/* ---------- 長關卡分段存檔 ---------- */
+const SEG_DAYS = 14; // 存了幾天沒接著打就作廢
+/** 每一關已經存了幾段（從第 0 段連續算） */
+function segProgress(uid) {
+  const rows = dbh().prepare("SELECT level, seg FROM adv_seg WHERE user_id=? AND ts>=? ORDER BY level, seg").all(uid, Date.now() - SEG_DAYS * 86400000);
+  const out = {};
+  for (const r of rows) if ((out[r.level] || 0) === r.seg) out[r.level] = r.seg + 1;
+  return out;
+}
+/** 這個人最近 20 次過關的平均速度（依語言），用來估計每一關要打多久 */
+function avgSpeed(uid) {
+  const rows = dbh().prepare("SELECT level, speed FROM adv_runs WHERE user_id=? AND flag='' AND stars>0 ORDER BY ts DESC LIMIT 60").all(uid);
+  const by = {};
+  for (const r of rows) {
+    const lang = r.level.startsWith("news-") ? "en" : r.level.split("-")[0];
+    (by[lang] ||= []).length < 20 && by[lang].push(r.speed);
+  }
+  return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10]));
 }
 
 /** 過關：重播按鍵紀錄算出星星；登入的人記進度、發小魚乾和掉落的裝扮 */
@@ -95,11 +117,34 @@ export function advClear(user, b) {
   const db = dbh();
   const stars0 = user ? starMap(user.id) : {};
   if (user && !unlocked(lv, stars0)) return { status: 400, error: "還沒解鎖這一關" };
-  const r = replay({ texts: lv.texts, rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
+  // 分段：這次打的是第幾段（短的關卡只有第 0 段）
+  const nSeg = lv.segs.length, seg = b.seg == null ? 0 : b.seg;
+  if (!Number.isInteger(seg) || seg < 0 || seg >= nSeg) return { status: 400, error: "格式不對" };
+  const r = replay({ texts: lv.segs[seg], rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
   if (!r.ok) return { status: 400, error: "成績驗算沒過：" + r.reason };
-  const sum = r.sum, flag = r.flags.join(",");
+  let sum = r.sum, flag = r.flags.join(",");
+  if (nSeg > 1) {
+    if (flag) { console.warn(`[冒險] 可疑（${flag}）：${lv.id} 第 ${seg + 1} 段`); return { ok: true, level: lv.id, seg, segs: nSeg, flagged: true, stars: 0, fish: 0, drops: [] }; }
+    const part = { correct: sum.correct, keys: sum.keys, errs: sum.errs, ms: Math.round(sum.ms) };
+    let parts;
+    if (user) {
+      db.prepare(`INSERT INTO adv_seg (user_id, level, seg, correct, keys, errs, ms, ts) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(user_id, level, seg) DO UPDATE SET correct=excluded.correct, keys=excluded.keys, errs=excluded.errs, ms=excluded.ms, ts=excluded.ts`)
+        .run(user.id, lv.id, seg, part.correct, part.keys, part.errs, part.ms, Date.now());
+      parts = db.prepare("SELECT seg, correct, keys, errs, ms FROM adv_seg WHERE user_id=? AND level=? AND ts>=? ORDER BY seg").all(user.id, lv.id, Date.now() - SEG_DAYS * 86400000);
+    } else {
+      // 沒登入：前面幾段的成績由瀏覽器帶來（沒有獎勵，只算星星給自己看）
+      const prior = Array.isArray(b.prior) ? b.prior.slice(0, nSeg - 1) : [];
+      parts = [...prior.map((p, i) => ({ seg: i, correct: +p.correct || 0, keys: +p.keys || 0, errs: +p.errs || 0, ms: +p.ms || 0 })), { seg, ...part }];
+    }
+    if (seg < nSeg - 1) return { ok: true, level: lv.id, seg, segs: nSeg, saved: !!user, part: { ...part, speed: sum.speed, acc: sum.acc } };
+    const have = new Set(parts.map((p) => p.seg));
+    if (![...Array(nSeg).keys()].every((i) => have.has(i))) return { status: 400, error: "前面的段落還沒打完（或已經超過 " + SEG_DAYS + " 天），請從第 1 段開始" };
+    sum = mergeSums(lv.lang, parts);
+    if (user) db.prepare("DELETE FROM adv_seg WHERE user_id=? AND level=?").run(user.id, lv.id);
+  }
   const stars = flag ? 0 : starsOf(lv, sum);
-  const out = { ok: true, level: lv.id, stars, speed: sum.speed, acc: sum.acc, ms: Math.round(sum.ms), flagged: !!flag, fish: 0, drops: [] };
+  const out = { ok: true, level: lv.id, seg, segs: nSeg, stars, speed: sum.speed, acc: sum.acc, ms: Math.round(sum.ms), flagged: !!flag, fish: 0, drops: [] };
   if (!user) return out;
   const now = Date.now(), prev = stars0[lv.id] || 0;
   if (!flag) {
@@ -172,10 +217,12 @@ export function createVlink(user, b, { textOf, CATS, LENS, CAT_NAME, LEN_NAME, u
   if (b.kind === "quest") {
     const lv = levelOf(b.level);
     if (!lv) return { status: 400, error: "找不到這一關" };
-    const r = replay({ texts: lv.texts, rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
+    const seg = b.seg == null ? 0 : b.seg;
+    if (!Number.isInteger(seg) || seg < 0 || seg >= lv.segs.length) return { status: 400, error: "格式不對" };
+    const r = replay({ texts: lv.segs[seg], rule: b.rule, cat: lv.lang, events: b.events, limitMs: null });
     if (!r.ok || r.flags.length) return { status: 400, error: "這一局不能做影片" };
     const title = lv.news ? `📰 ${lv.news.date.slice(5).replace("-", "/")} ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
-    p = { scene: "battle", lang: lv.lang, texts: lv.texts, boss: lv.boss, big: !!lv.big, title, stars: starsOf(lv, r.sum), unit: "WPM" };
+    p = { scene: "battle", lang: lv.lang, texts: lv.segs[seg], boss: lv.boss, big: !!lv.big, title: title + (lv.segs.length > 1 ? `（第 ${seg + 1}/${lv.segs.length} 段）` : ""), stars: lv.segs.length > 1 ? (user ? starMap(user.id)[lv.id] || 0 : 0) : starsOf(lv, r.sum), unit: "WPM" };
   } else if (b.kind === "practice") {
     if (!CATS.includes(b.c) || !LENS.includes(b.l) || !["full", "t60"].includes(b.m)) return { status: 400, error: "格式不對" };
     const specs = Array.isArray(b.specs) ? b.specs.slice(0, 40) : [];

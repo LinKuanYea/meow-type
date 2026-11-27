@@ -157,11 +157,51 @@ export const ISLANDS = [
   { id: "zh", name: "中文島", lang: "zh", open: false, chapters: [] },
 ];
 
+/* ---------- 長關卡分段存檔 ---------- */
+// 超過 SEG_MAX 個字的關卡切成幾段：每段打完就存起來（伺服器驗算過），下次從下一段接著打；星星用全部段落合起來算。
+// 切法：程式照「行」切（每一塊的結尾是換行），盡量讓每段接近 SEG_MAX；短的關卡只有一段，跟以前一樣。
+export const SEG_MAX = 400;
+export function segmentsOf(texts) {
+  const total = texts.reduce((a, t) => a + t.length, 0);
+  if (total <= SEG_MAX * 1.2) return [texts.slice()];
+  // 段數＝總字數 ÷ SEG_MAX 無條件進位；照行往下放，累積到「平均每段字數」就換下一段（原本分開的段落仍然分開）
+  const n = Math.ceil(total / SEG_MAX), goal = total / n, segs = [[]];
+  let acc = 0;
+  for (const t of texts) {
+    const lines = t.split("\n"); let chunk = "";
+    lines.forEach((ln, i) => {
+      const piece = ln + (i < lines.length - 1 ? "\n" : "");
+      if ((chunk || segs[segs.length - 1].length) && segs.length < n && acc + piece.length / 2 > goal * segs.length) {
+        if (chunk) segs[segs.length - 1].push(chunk);
+        chunk = ""; segs.push([]);
+      }
+      chunk += piece; acc += piece.length;
+    });
+    if (chunk) segs[segs.length - 1].push(chunk);
+  }
+  return segs.filter((sg) => sg.length);
+}
+/** 幫關卡加上 segs（每段的文字陣列）與 chars（總字數） */
+export function withSegs(lv) {
+  lv.segs = segmentsOf(lv.texts);
+  lv.chars = lv.texts.reduce((a, t) => a + t.length, 0);
+  return lv;
+}
+/** 把幾段的成績合起來（correct、keys、errs、ms 加總後重算速度、正確率） */
+export function mergeSums(lang, sums) {
+  const t = sums.reduce((a, s) => ({ correct: a.correct + s.correct, keys: a.keys + s.keys, errs: a.errs + s.errs, ms: a.ms + s.ms }), { correct: 0, keys: 0, errs: 0, ms: 0 });
+  const m = t.ms / 60000;
+  return { ...t, acc: t.keys ? (t.keys - t.errs) / t.keys : 1, speed: m > 0 ? (lang === "zh" ? t.correct / m : t.correct / 5 / m) : 0 };
+}
+/** 預估要打幾分鐘（wpm：這個人的平均速度） */
+export const etaMin = (chars, wpm, lang) => Math.max(1, Math.round(chars / (lang === "zh" ? wpm : wpm * 5)));
+
 export const LEVELS = new Map();
 for (const is of ISLANDS) for (const ch of is.chapters) ch.levels.forEach((lv, k) => {
   lv.island = is.id; lv.lang = is.lang; lv.chapter = ch.id; lv.login = ch.login; lv.index = k;
   lv.texts = lv.parts.map((p) => (p.code ? code(is.lang, p.code).t : p.lines.map((t) => line(is.lang, t).t).join("\n")));
   lv.prev = k > 0 ? ch.levels[k - 1].id : null;
+  withSegs(lv);
   LEVELS.set(lv.id, lv);
 });
 // 每章第一關：上一章的最後一關要過

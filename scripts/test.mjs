@@ -8,7 +8,7 @@ import { BANK, CATS, LENS, textOf, randomSpec, itemText, itemsOf } from "../shar
 import { CODE } from "../shared/bank-code.js";
 import { Typist, replay, summarize, MAX_AHEAD } from "../shared/judge.js";
 import { analyze, tips, classify, drillText } from "../shared/analyze.js";
-import { ISLANDS, LEVELS, starsOf, fishFor, FISH } from "../shared/quest.js";
+import { ISLANDS, LEVELS, starsOf, fishFor, FISH, withSegs, segmentsOf, mergeSums, etaMin, SEG_MAX } from "../shared/quest.js";
 import { ITEMS, ITEM, cleanOutfit } from "../shared/items.js";
 import { newsLevel, newsFishFor, streakOf, twDate, addDays, NEWS_FISH } from "../shared/news.js";
 
@@ -143,6 +143,15 @@ function human(texts, { seed = 1, gap = [70, 260], errRate = 0.03, limitMs = nul
   const lv = LEVELS.get("cpp-1-1");
   eq([starsOf(lv, { acc: 0.8, speed: 99 }), starsOf(lv, { acc: 0.9, speed: 99 }), starsOf(lv, { acc: 0.96, speed: 1 }), starsOf(lv, { acc: 0.96, speed: 99 })], [0, 1, 2, 3], "星星的條件");
   eq([fishFor(lv, 0, 3, 0), fishFor(lv, 1, 3, 0), fishFor(lv, 3, 3, 0), fishFor(lv, 3, 3, FISH.replayPerDay), fishFor(LEVELS.get("cpp-1-5"), 0, 1, 0)], [30, 20, 2, 0, 30], "小魚乾的算法");
+  for (const lv of LEVELS.values()) {
+    ok(lv.segs.flat().join("") === lv.texts.join("") && lv.segs.every((sg) => sg.every((t) => t.length)), `${lv.id}：分段後文字不變`);
+    if (lv.segs.length > 1) ok(lv.segs.every((sg) => sg.reduce((a, t) => a + t.length, 0) <= SEG_MAX * 1.25), `${lv.id}：每段不會太長`);
+  }
+  ok(LEVELS.get("cpp-7-5").segs.length === 3 && LEVELS.get("cpp-1-1").segs.length === 1, "長的關卡才分段");
+  eq(segmentsOf(["a\nb"]), [["a\nb"]], "短的不分段");
+  const mg = mergeSums("cpp", [{ correct: 100, keys: 110, errs: 10, ms: 60000 }, { correct: 50, keys: 50, errs: 0, ms: 30000 }]);
+  ok(mg.correct === 150 && Math.abs(mg.acc - 150 / 160) < 1e-9 && mg.speed === 20, "分段成績合起來");
+  eq([etaMin(1000, 20, "cpp"), etaMin(10, 20, "cpp")], [10, 1], "預估時間");
   eq(cleanOutfit({ fur: "fur-black", hat: "hat-cap", neck: "nope" }, new Set(["hat-cap"])), { fur: "fur-orange", hat: "hat-cap" }, "沒擁有的裝扮穿不上");
   eq(streakOf(["2026-11-25", "2026-11-26", "2026-11-27"], "2026-11-27"), 3, "連續天數");
   eq(streakOf(["2026-11-25", "2026-11-26"], "2026-11-27"), 2, "今天還沒打：從昨天算");
@@ -514,12 +523,30 @@ try {
   const nDay = await (await get("/api/news/2026-11-27")).json();
   ok(nDay.paras.length >= 2 && nDay.vocab.length >= 5 && nDay.sources[0].url.startsWith("https://"), "讀一天的新聞");
   eq((await get("/api/news/2099-01-01")).status, 404, "未來或不存在的日期");
-  const nLv = newsLevel(nDay), nEv = human(nLv.texts, { seed: 4, gap: [45, 120], errRate: 0 }).evs;
-  const nA = await (await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", events: nEv })).json();
+  const nLv = withSegs(newsLevel(nDay)), nEv = human(nLv.segs[0], { seed: 4, gap: [45, 120], errRate: 0 }).evs;
+  // 分段的關卡：一段一段打（沒登入時，前面幾段的成績由瀏覽器帶著）
+  const playSegs = async (lv, C, seed = 4) => {
+    const prior = []; let r;
+    for (let k = 0; k < lv.segs.length; k++) {
+      r = await (await xAdvpost("/api/quest/clear", { level: lv.id, rule: "back", seg: k, prior, events: human(lv.segs[k], { seed: seed + k, gap: [45, 120], errRate: 0 }).evs }, C)).json();
+      if (r.part) prior.push(r.part);
+    }
+    return r;
+  };
+  ok(nLv.segs.length >= 2, "每日新聞會分段（" + nLv.chars + " 字，" + nLv.segs.length + " 段）");
+  const nA = await playSegs(nLv);
   ok(nA.ok && nA.stars === 3 && nA.fish === 0, "沒登入也能打每日新聞（沒有小魚乾）");
-  const nB = await (await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", events: nEv }, XAV)).json();
+  const nS0 = await (await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", seg: 0, events: nEv }, XAV)).json();
+  ok(nS0.ok && nS0.saved && nS0.seg === 0 && nS0.segs === nLv.segs.length && nS0.stars === undefined, "打完第 1 段：存檔，還沒結算");
+  eq((await (await fetch(base + "/api/quest", { headers: XAV })).json()).segs[nLv.id], 1, "冒險進度記得打到第幾段");
+  eq((await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", seg: nLv.segs.length - 1, events: human(nLv.segs[nLv.segs.length - 1], { seed: 9, gap: [45, 120], errRate: 0 }).evs }, XAV)).status, nLv.segs.length > 2 ? 400 : 200, "中間的段落沒打不能結算");
+  eq((await xAdvpost("/api/quest/clear", { level: nLv.id, rule: "back", seg: 99, events: nEv }, XAV)).status, 400, "段落編號不對");
+  const nB = await playSegs(nLv, XAV, 20);
+  ok(nB.stars === 3 && nB.speed > 0 && Math.abs(nB.acc - 1) < 1e-9, "最後一段：全部段落合起來算星星");
+  ok(!(await (await fetch(base + "/api/quest", { headers: XAV })).json()).segs[nLv.id], "結算後分段紀錄清掉");
   eq(nB.fish, 3 * (nDay.date === twDate() ? NEWS_FISH.today : NEWS_FISH.history), "每日新聞第一次三星的小魚乾");
   eq((await xAdvpost("/api/quest/clear", { level: "news-2099-01-01", rule: "back", events: nEv })).status, 400, "不存在的新聞不能打");
+  ok((await (await fetch(base + "/api/quest", { headers: XAV })).json()).avg.cpp > 0, "平均速度（估計時間用）");
   const nBoard = await (await fetch(base + "/api/news/2026-11-27/board", { headers: XAV })).json();
   ok(nBoard.length === 1 && nBoard[0].me && nBoard[0].stars === 3, "每日新聞排行榜");
   // 影片連結（電腦打完、手機掃 QR code 做影片）

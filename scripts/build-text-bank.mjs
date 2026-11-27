@@ -139,7 +139,7 @@ for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filte
   if (!Array.isArray(n.sources) || !n.sources.length || n.sources.some((x) => !x.name || !/^https:\/\/[^\s"<>]+$/.test(x.url || ""))) err(where, "sources：至少 1 個 { name, url（https） }");
   news[date] = { date, title: n.title, topic: n.topic, paras: n.paras, vocab: n.vocab, questions: n.questions, sources: n.sources };
 }
-const newsIndex = Object.values(news).sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ date, title, topic }) => ({ date, title, topic }));
+const newsIndex = Object.values(news).sort((a, b) => (a.date < b.date ? 1 : -1)).map(({ date, title, topic, paras }) => ({ date, title, topic, chars: paras.reduce((x, t) => x + t.length, 0) }));
 
 if (errs.length) {
   console.error("題庫檢查沒過：\n" + errs.map((e) => "  ✗ " + e).join("\n"));
