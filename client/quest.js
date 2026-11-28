@@ -446,7 +446,7 @@ function renderResult(lv, sum, out, prev) {
     ${out.drops?.length ? `<div class="drop"><canvas id="dropCv" width="160" height="140"></canvas><p>獲得裝扮：<b>${esc(ITEM.get(out.drops[0]).name)}</b>！到「換裝」穿上它。</p></div>` : ""}
     ${canMakeVideo() && !out.flagged && !out.error ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛的打怪過程做成幾秒的直式影片，可以分享到 IG 限時動態。</span></div>` : ""}
     ${CH && CH.level === lv.id && !out.error ? vsHTML(sum) : ""}
-    ${!out.flagged && !out.error && out.events ? `<div class="chal" id="chal"><button type="button" id="bChal">⚔️ 挑戰朋友</button><span class="hint">產生這一關的連結，朋友打開就直接打同一關、跟你比。</span></div>` : ""}
+    ${!out.flagged && !out.error && out.events ? `<div class="chalbox" id="chal"><button type="button" id="bChal">⚔️ 挑戰朋友</button><span class="hint">產生這一關的連結，朋友打開就直接打同一關、跟你比。</span></div>` : ""}
     ${L ? L.html : ""}${lv.custom ? '<div class="board" id="setBoard"><p class="empty">排行榜載入中…</p></div>' : ""}
     <div class="btns">${canNext ? '<button class="main" id="bNext" type="button">下一關</button>' : ""}<button${canNext ? "" : ' class="main"'} id="bAgain" type="button">再打一次</button><button id="bMap" type="button">回地圖</button></div></div>`;
   if (out.drops?.length) { const c = $("#dropCv").getContext("2d"); c.imageSmoothingEnabled = false; drawDressed(c, 8, 0, 9, 0, { ...ST.outfit, [ITEM.get(out.drops[0]).slot]: out.drops[0] }); }

@@ -20,9 +20,13 @@ h1{font:400 40px/1.05 "DotGothic16",monospace;margin:0;color:var(--gin)}
 .grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .grp b{font-size:13px;font-weight:700;color:var(--todo);margin-right:2px}
 .seg{display:inline-flex;border:2px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
-.seg button{font:inherit;font-size:14px;border:0;background:none;color:var(--ink);padding:0 12px;min-height:38px;cursor:pointer}
+.seg button{font:inherit;font-size:14px;font-weight:400;border:0;border-radius:0;background:none;color:var(--ink);padding:0 12px;min-height:38px;cursor:pointer}
 .seg button+button{border-left:2px solid var(--line)}
 .seg button[aria-pressed=true]{background:var(--gin);color:#fff;font-weight:700}
+/* 所有按鈕的基本樣式（:where 不加權重：有自己樣式的按鈕照舊；沒寫到的按鈕不會變成瀏覽器原生的灰按鈕） */
+:where(button:not(.link,.lvl,.say,.acctbtn,.newver)){font:inherit;font-size:15px;font-weight:700;min-height:40px;padding:0 16px;border-radius:10px;border:2px solid var(--gin);background:var(--card);color:var(--gin);cursor:pointer}
+:where(button.main:not(.link,.lvl)){background:var(--gin);color:#fff}
+:where(button:disabled){opacity:.45;cursor:not-allowed}
 button:focus-visible{outline:3px solid var(--gin);outline-offset:2px}
 .track{position:relative;height:118px;border-radius:14px;overflow:hidden;background:linear-gradient(var(--sky) 0 62%,var(--grass) 62%);border:2px solid var(--line)}
 .track::after{content:"";position:absolute;left:0;right:0;bottom:22px;height:3px;background:repeating-linear-gradient(90deg,#fff8 0 18px,transparent 18px 36px)}
@@ -362,7 +366,9 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .vocab tr.ex small{display:inline-block;min-width:34px;margin-right:6px;padding:0 6px;border-radius:6px;background:light-dark(#f3e7d6,#4a3b2e);font-size:12px;text-align:center}
 .vocab tr.ex .zh{display:block;margin-left:46px;opacity:.75}
 /* 挑戰連結 */
-.chal{margin:12px 0}
+.chalbox{margin:12px 0;padding:12px 16px;border-radius:12px;background:var(--soft)}
+.chalbox .row{display:flex;flex-wrap:wrap;gap:8px}
+.chalbox .qrbox{margin-top:10px}
 .chalurl{width:100%;max-width:420px;font:inherit;font-size:15px;padding:6px 8px;border:2px solid var(--line);border-radius:8px}
 #vgo{margin:18px 0}
 #vgo a{display:inline-block;padding:12px 22px;border-radius:12px;background:var(--gin);color:#fff;font-weight:700;text-decoration:none}
@@ -372,3 +378,4 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 .ncard .nlearn{font:inherit;font-size:14px;padding:6px 10px;border:2px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);cursor:pointer;text-align:center}
 .ncard .nlearn:hover{border-color:var(--gin)}
 .nlpanel{max-width:760px}
+.chalbox>.hint{margin-left:10px}
