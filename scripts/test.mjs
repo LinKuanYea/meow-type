@@ -289,7 +289,8 @@ const NT = twDate(), newsDir = path.join(dir, "news");
 mkdirSync(newsDir);
 for (const f of readdirSync(path.join(ROOT, "shared/news"))) copyFileSync(path.join(ROOT, "shared/news", f), path.join(newsDir, f));
 {
-  const idx = JSON.parse(readFileSync(path.join(newsDir, "index.json"), "utf8"));
+  // 正式的新聞如果已經有今天的，先拿掉（測試要用自己的 3 篇「今天」，不然每篇會出現兩次）
+  const idx = JSON.parse(readFileSync(path.join(newsDir, "index.json"), "utf8")).filter((n) => n.date !== NT);
   const topics = ["科學", "運動", "環境"];
   for (let k = 1; k <= 3; k++) {
     const key = `${NT}-${k}`, paras = [`Test story number ${k} is short. Cats like to read the news every morning.`, `This is the second part of story ${k}. It has only a few words.`];
