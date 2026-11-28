@@ -351,3 +351,19 @@ code,pre,.ln code{font-variant-ligatures:none;font-feature-settings:"liga" 0,"ca
 @media (max-width:720px){.wb-grid{grid-template-columns:minmax(0,1fr)}.wb-head{grid-template-columns:96px minmax(0,1fr);padding:12px}.wb-head canvas{width:96px;height:84px}.wb-head h3{font-size:22px}.wb-gift canvas{width:72px;height:63px}}
 #wbGo{font:inherit;font-size:18px;font-weight:700;min-height:48px;padding:0 26px;border-radius:12px;border:2px solid var(--gin);background:var(--gin);color:#fff;cursor:pointer;margin-top:8px}
 #wbGo:hover{filter:brightness(1.08)}
+/* 新聞結算：全文、朗讀、例句 */
+.fulltext{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:6px 16px;font-family:Georgia,"Times New Roman",serif;font-size:17px;line-height:1.7}
+.fulltext mark,.vocab mark{background:light-dark(#ffe3a6,#6b5320);color:inherit;border-radius:3px;padding:0 2px}
+.say{font:inherit;font-size:14px;line-height:1;padding:4px 7px;border:2px solid var(--line);border-radius:999px;background:var(--card);cursor:pointer;vertical-align:middle}
+.say.all{font-size:14px;margin-left:8px;padding:4px 12px}
+.say.on{border-color:var(--gin);background:light-dark(#e6f4e1,#2d4a26)}
+.vocab tr.ex td{border-top:0;padding-top:0;font-size:14px;opacity:.9}
+.vocab tr.ex div{margin:2px 0 6px}
+.vocab tr.ex small{display:inline-block;min-width:34px;margin-right:6px;padding:0 6px;border-radius:6px;background:light-dark(#f3e7d6,#4a3b2e);font-size:12px;text-align:center}
+.vocab tr.ex .zh{display:block;margin-left:46px;opacity:.75}
+/* 挑戰連結 */
+.chal{margin:12px 0}
+.chalurl{width:100%;max-width:420px;font:inherit;font-size:15px;padding:6px 8px;border:2px solid var(--line);border-radius:8px}
+#vgo{margin:18px 0}
+#vgo a{display:inline-block;padding:12px 22px;border-radius:12px;background:var(--gin);color:#fff;font-weight:700;text-decoration:none}
+.chbar{margin:6px 0 10px;padding:8px 14px;border-radius:10px;background:light-dark(#fff1dc,#4a3520);border:2px solid var(--gin);font-weight:700}

@@ -16,7 +16,7 @@ export function addDays(date, n) { return new Date(Date.parse(date + "T00:00:00Z
 /** 新聞 → 冒險模式的關卡（每一段是一個段落，打完自動接下一段） */
 export function newsLevel(n) {
   return {
-    id: "news-" + (n.key || n.date), name: n.title, lang: "en", texts: n.paras, target: NEWS_TARGET, news: n,
+    id: "news-" + (n.key || n.date), name: n.title, segMax: n.key && n.key !== n.date ? 850 : undefined, lang: "en", texts: n.paras, target: NEWS_TARGET, news: n,
     boss: { name: "今日新聞怪", glyph: "N", color: "#5a8fd6" }, big: true, prev: null, login: false, index: 0, chapter: "news", island: "news",
   };
 }

@@ -161,11 +161,11 @@ export const ISLANDS = [
 // 超過 SEG_MAX 個字的關卡切成幾段：每段打完就存起來（伺服器驗算過），下次從下一段接著打；星星用全部段落合起來算。
 // 切法：程式照「行」切（每一塊的結尾是換行），盡量讓每段接近 SEG_MAX；短的關卡只有一段，跟以前一樣。
 export const SEG_MAX = 400;
-export function segmentsOf(texts) {
+export function segmentsOf(texts, max = SEG_MAX) {
   const total = texts.reduce((a, t) => a + t.length, 0);
-  if (total <= SEG_MAX * 1.2) return [texts.slice()];
-  // 段數＝總字數 ÷ SEG_MAX 無條件進位；照行往下放，累積到「平均每段字數」就換下一段（原本分開的段落仍然分開）
-  const n = Math.ceil(total / SEG_MAX), goal = total / n, segs = [[]];
+  if (total <= max * 1.2) return [texts.slice()];
+  // 段數＝總字數 ÷ max 無條件進位；照行往下放，累積到「平均每段字數」就換下一段（原本分開的段落仍然分開）
+  const n = Math.ceil(total / max), goal = total / n, segs = [[]];
   let acc = 0;
   for (const t of texts) {
     const lines = t.split("\n"); let chunk = "";
@@ -183,7 +183,7 @@ export function segmentsOf(texts) {
 }
 /** 幫關卡加上 segs（每段的文字陣列）與 chars（總字數） */
 export function withSegs(lv) {
-  lv.segs = segmentsOf(lv.texts);
+  lv.segs = segmentsOf(lv.texts, lv.segMax || SEG_MAX); // segMax：每日新聞短篇一次打完（約 1000 字以內不切）
   lv.chars = lv.texts.reduce((a, t) => a + t.length, 0);
   return lv;
 }

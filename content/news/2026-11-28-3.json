@@ -7,19 +7,87 @@
     "The match has 14 classical games, and the first player to reach 7.5 points wins. A win is worth one point and a draw is worth half a point. The first three games all ended in draws, so the score is level at 1.5 to 1.5. If the match is still tied after 14 games, faster tiebreak games will be played on December 12."
   ],
   "vocab": [
-    { "w": "reigning", "pos": "adj.", "zh": "在位的；現任的", "lv": 3 },
-    { "w": "defending", "pos": "v.", "zh": "衛冕；防守", "lv": 2 },
-    { "w": "challenge", "pos": "v.", "zh": "挑戰", "lv": 2 },
-    { "w": "draw", "pos": "n.", "zh": "平手；和局", "lv": 2 },
-    { "w": "level", "pos": "adj.", "zh": "（比分）相同的", "lv": 2 },
-    { "w": "tiebreak", "pos": "n.", "zh": "加賽；決勝局", "lv": 3 }
+    {
+      "w": "reigning",
+      "pos": "adj.",
+      "zh": "在位的；現任的",
+      "lv": 3,
+      "ex": "The reigning champion lost in the first round this year.",
+      "exZh": "衛冕冠軍今年在第一輪就輸了。"
+    },
+    {
+      "w": "defending",
+      "pos": "v.",
+      "zh": "衛冕；防守",
+      "lv": 2,
+      "ex": "She is defending her title at the school speech contest.",
+      "exZh": "她在校內演講比賽中衛冕冠軍。"
+    },
+    {
+      "w": "challenge",
+      "pos": "v.",
+      "zh": "挑戰",
+      "lv": 2,
+      "ex": "I challenge you to finish the puzzle in five minutes.",
+      "exZh": "我挑戰你在五分鐘內完成這個拼圖。"
+    },
+    {
+      "w": "draw",
+      "pos": "n.",
+      "zh": "平手；和局",
+      "lv": 2,
+      "ex": "The soccer game ended in a draw, one to one.",
+      "exZh": "那場足球賽一比一踢成平手。"
+    },
+    {
+      "w": "level",
+      "pos": "adj.",
+      "zh": "（比分）相同的",
+      "lv": 2,
+      "ex": "The two teams were level at halftime.",
+      "exZh": "兩隊在中場時比分相同。"
+    },
+    {
+      "w": "tiebreak",
+      "pos": "n.",
+      "zh": "加賽；決勝局",
+      "lv": 3,
+      "ex": "They played a tiebreak to decide the winner.",
+      "exZh": "他們打了一場加賽來決定贏家。"
+    }
   ],
   "questions": [
-    { "q": "How did Sindarov earn the right to play for the title?", "options": ["He was chosen by the city of Geneva", "He beat Gukesh last year", "He won the Candidates Tournament", "He had the highest age"], "answer": 2, "why": "第一段：Sindarov 贏得挑戰者錦標賽（Candidates Tournament），取得挑戰冠軍的資格。" },
-    { "q": "What is the score after three games?", "options": ["3 to 0 for Gukesh", "2 to 1 for Sindarov", "1 to 0 with two games canceled", "1.5 to 1.5"], "answer": 3, "why": "第二段：前三盤都是和局，每盤各得半分，比分 1.5 比 1.5。" }
+    {
+      "q": "How did Sindarov earn the right to play for the title?",
+      "options": [
+        "He was chosen by the city of Geneva",
+        "He beat Gukesh last year",
+        "He won the Candidates Tournament",
+        "He had the highest age"
+      ],
+      "answer": 2,
+      "why": "第一段：Sindarov 贏得挑戰者錦標賽（Candidates Tournament），取得挑戰冠軍的資格。"
+    },
+    {
+      "q": "What is the score after three games?",
+      "options": [
+        "3 to 0 for Gukesh",
+        "2 to 1 for Sindarov",
+        "1 to 0 with two games canceled",
+        "1.5 to 1.5"
+      ],
+      "answer": 3,
+      "why": "第二段：前三盤都是和局，每盤各得半分，比分 1.5 比 1.5。"
+    }
   ],
   "sources": [
-    { "name": "ETV Bharat", "url": "https://www.etvbharat.com/en/sports/world-chess-championship-third-game-drawn-as-gukeshs-preparation-proves-superior-enn26112700206" },
-    { "name": "Sportscape Magazine", "url": "https://www.sportscapemagazine.com/blog/gukesh-sindarov-game-3-draw-world-chess-championship-2026" }
+    {
+      "name": "ETV Bharat",
+      "url": "https://www.etvbharat.com/en/sports/world-chess-championship-third-game-drawn-as-gukeshs-preparation-proves-superior-enn26112700206"
+    },
+    {
+      "name": "Sportscape Magazine",
+      "url": "https://www.sportscapemagazine.com/blog/gukesh-sindarov-game-3-draw-world-chess-championship-2026"
+    }
   ]
 }

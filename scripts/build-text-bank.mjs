@@ -132,6 +132,14 @@ for (const f of existsSync(root + NEWS_DIR) ? readdirSync(root + NEWS_DIR).filte
     const w2 = `${where} vocab[${k}]`;
     if (!vb.w || !vb.zh || !POS.test(vb.pos || "") || ![1, 2, 3].includes(vb.lv)) err(w2, "要有 w、pos、zh、lv（1 國中、2 高中、3 進階）");
     else if (!(n.paras || []).join(" ").toLowerCase().includes(vb.w.toLowerCase().split(" ")[0])) err(w2, `文章裡找不到「${vb.w}」`);
+    // 例句（ex、exZh）：2026-11-29 起的新聞必填（之前的只顯示文中的句子）
+    if (vb.ex != null || (short && date >= "2026-11-29")) {
+      const ex = String(vb.ex || ""), wc2 = ex.split(/\s+/).filter(Boolean).length;
+      if (!/^[\x20-\x7e]+$/.test(ex) || wc2 < 5 || wc2 > 25) err(w2, "ex：另外寫一句英文例句（5～25 字、只能半形字元），不要照抄文章");
+      else if (!ex.toLowerCase().includes(vb.w.toLowerCase().split(" ")[0].slice(0, 4))) err(w2, `ex 例句裡要用到「${vb.w}」`);
+      else if ((n.paras || []).join(" ").includes(ex.replace(/[.!?]$/, ""))) err(w2, "ex 不要照抄文章裡的句子");
+      if (!/[\u4e00-\u9fff]/.test(vb.exZh || "")) err(w2, "exZh：例句的中文翻譯");
+    }
   }
   if (!Array.isArray(n.questions) || n.questions.length < 2 || n.questions.length > 3) err(where, "questions：2～3 題");
   for (const [k, q] of (n.questions || []).entries()) {

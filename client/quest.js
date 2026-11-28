@@ -127,9 +127,43 @@ async function playNews(date) {
   if (n.error) return toast(n.error);
   play(withSegs(newsLevel(n)));
 }
+/* ---------- 朗讀（瀏覽器內建的語音，不用下載音檔） ---------- */
+const TTS = "speechSynthesis" in window && typeof SpeechSynthesisUtterance === "function";
+let enVoice = null;
+function pickVoice() {
+  const vs = speechSynthesis.getVoices().filter((v) => /^en[-_]/i.test(v.lang));
+  enVoice = vs.find((v) => /en[-_]US/i.test(v.lang) && /natural|google|samantha|aria|jenny/i.test(v.name)) || vs.find((v) => /en[-_]US/i.test(v.lang)) || vs[0] || null;
+}
+if (TTS) { pickVoice(); speechSynthesis.addEventListener?.("voiceschanged", pickVoice); }
+function say(text, btn) {
+  if (!TTS) return;
+  const playing = btn?.classList.contains("on");
+  speechSynthesis.cancel();
+  document.querySelectorAll(".say.on").forEach((b) => b.classList.remove("on"));
+  if (playing) return; // 再按一次＝停止
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US"; u.rate = 0.9; if (enVoice) u.voice = enVoice;
+  if (btn) { btn.classList.add("on"); u.onend = u.onerror = () => btn.classList.remove("on"); }
+  speechSynthesis.speak(u);
+}
+const sayBtn = (text, label) => (TTS ? `<button type="button" class="say" data-say="${esc(text)}" aria-label="${esc(label)}" title="${esc(label)}">🔊</button>` : "");
+// 切句子：句點後面接空白和大寫才算句尾（1.5、U.S. 這種不切）
+const sentencesOf = (paras) => paras.flatMap((p) => p.replace(/([.!?]["')]*)\s+(?=["'(]?[A-Z])/g, "$1\n").split("\n")).map((x) => x.trim()).filter(Boolean);
+const stemOf = (w) => w.toLowerCase().replace(/(e|y|ies|es|s|ed|ing)$/, "").slice(0, Math.max(3, Math.min(w.length, 6)));
+const wordRe = (w) => new RegExp(`\\b(${w.split(/\s+/).map((x) => stemOf(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\w*\\s+")}\\w*)`, "i");
+/** 新聞打完：全文（單字標出來）、單字（發音、文中句子、例句）、理解題、原始報導 */
 function newsLearn(n) {
   const LV = (x) => ["", "國中", "高中", "進階"][x] || "";
-  return `<div class="learn"><h3>單字</h3><table class="lb vocab"><tbody>${n.vocab.map((v) => `<tr><td><b>${esc(v.w)}</b></td><td>${esc(v.pos)}</td><td>${esc(v.zh)}</td><td class="n"><span class="lv">${LV(v.lv)}</span></td></tr>`).join("")}</tbody></table>
+  const sents = sentencesOf(n.paras);
+  let full = n.paras.map((p) => esc(p));
+  for (const v of n.vocab) { const re = new RegExp(wordRe(v.w).source, "i"); full = full.map((p) => p.replace(re, "<mark>$1</mark>")); }
+  return `<div class="learn"><h3>全文 ${TTS ? `<button type="button" class="say all" data-say="${esc(n.paras.join(" "))}">🔊 朗讀全文</button>` : ""}</h3>
+    <div class="fulltext">${full.map((p) => `<p>${p}</p>`).join("")}</div>
+    <h3>單字</h3><table class="lb vocab"><tbody>${n.vocab.map((v) => {
+      const inText = sents.find((x) => wordRe(v.w).test(x));
+      return `<tr><td><b>${esc(v.w)}</b> ${sayBtn(v.w, "念 " + v.w)}</td><td>${esc(v.pos)}</td><td>${esc(v.zh)}</td><td class="n"><span class="lv">${LV(v.lv)}</span></td></tr>
+        <tr class="ex"><td colspan="4">${inText ? `<div><small>文中</small>${esc(inText).replace(new RegExp(wordRe(v.w).source, "i"), "<mark>$1</mark>")} ${sayBtn(inText, "念這句")}</div>` : ""}${v.ex ? `<div><small>例句</small>${esc(v.ex)} ${sayBtn(v.ex, "念例句")}${v.exZh ? `<span class="zh">${esc(v.exZh)}</span>` : ""}</div>` : ""}</td></tr>`;
+    }).join("")}</tbody></table>${TTS ? "" : '<p class="hint">這個瀏覽器不支援朗讀。</p>'}
     <h3>讀懂了嗎？</h3>${n.questions.map((q, i) => `<fieldset class="nq" data-a="${q.answer}"><legend>${i + 1}. ${esc(q.q)}</legend>${q.options.map((o, k) => `<label><input type="radio" name="nq${i}" value="${k}"> ${esc(o)}</label>`).join("")}<p class="why" hidden>${esc(q.why)}</p></fieldset>`).join("")}
     <p class="hint">原始報導：${n.sources.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name)}</a>`).join("、")}（這篇是用自己的話改寫的練習文章）</p></div>`;
 }
@@ -266,6 +300,10 @@ const TB = TypeBox({ box: $("#box"), txt: $("#txt"), ta: $("#ta"), comp: $("#com
 
 function play(lv, seg = segDone(lv)) {
   cancelAnimationFrame(raf);
+  if (TTS) speechSynthesis.cancel();
+  const chOn = CH && CH.level === lv.id;
+  $("#chBar").hidden = !chOn;
+  if (chOn) $("#chBar").textContent = `⚔️ 挑戰：${CH.nick || "對方"} 在這一關打了 ${Math.round(CH.speed)} ${CH.unit || "WPM"}${CH.stars ? "、" + "★".repeat(CH.stars) : ""}，打贏他！`;
   show("play");
   if (seg >= lv.segs.length) seg = 0;
   const texts = lv.segs[seg], nSeg = lv.segs.length;
@@ -403,11 +441,14 @@ function renderResult(lv, sum, out, prev) {
       : `<p class="loginhint"><button type="button" class="link dologin">用 Google 登入</button>就能拿小魚乾、換裝，進度也會存起來（第 2 章以後要登入）。</p>`}
     ${out.drops?.length ? `<div class="drop"><canvas id="dropCv" width="160" height="140"></canvas><p>獲得裝扮：<b>${esc(ITEM.get(out.drops[0]).name)}</b>！到「換裝」穿上它。</p></div>` : ""}
     ${canMakeVideo() && !out.flagged && !out.error ? `<div class="vid" id="vid"><button type="button" class="main" id="bVid">🎬 做成縮時影片</button><span class="hint">把剛剛的打怪過程做成幾秒的直式影片，可以分享到 IG 限時動態。</span></div>` : ""}
+    ${CH && CH.level === lv.id && !out.error ? vsHTML(sum) : ""}
+    ${!out.flagged && !out.error && out.events ? `<div class="chal" id="chal"><button type="button" id="bChal">⚔️ 挑戰朋友</button><span class="hint">產生這一關的連結，朋友打開就直接打同一關、跟你比。</span></div>` : ""}
     ${L ? L.html : ""}${lv.custom ? '<div class="board" id="setBoard"><p class="empty">排行榜載入中…</p></div>' : ""}
     <div class="btns">${canNext ? '<button class="main" id="bNext" type="button">下一關</button>' : ""}<button${canNext ? "" : ' class="main"'} id="bAgain" type="button">再打一次</button><button id="bMap" type="button">回地圖</button></div></div>`;
   if (out.drops?.length) { const c = $("#dropCv").getContext("2d"); c.imageSmoothingEnabled = false; drawDressed(c, 8, 0, 9, 0, { ...ST.outfit, [ITEM.get(out.drops[0]).slot]: out.drops[0] }); }
   if (L) L.bind($("#res"), { answered: 0, correct: 0, skipped: 0, opened: 0, onAnswer: (ok) => ok && toast("答對了！") });
   if ($("#bVid")) $("#bVid").onclick = () => videoUI(lv, out);
+  if ($("#bChal")) $("#bChal").onclick = () => challengeUI(lv, out, sum);
   $("#bAgain").onclick = () => play(lv);
   $("#bMap").onclick = renderMap;
   if (lv.news) $("#bMap").textContent = "回新聞列表";
@@ -431,6 +472,7 @@ async function playSet(id) {
   play(withSegs(customLevel(s)));
 }
 function bindNewsQuiz(root) {
+  root.querySelectorAll(".say").forEach((b) => b.addEventListener("click", () => say(b.dataset.say, b)));
   root.querySelectorAll(".nq").forEach((fs) => fs.addEventListener("change", (e) => {
     const k = Number(e.target.value), a = Number(fs.dataset.a);
     fs.querySelectorAll("label").forEach((l, i) => { l.classList.toggle("right", i === a); l.classList.toggle("wrong", i === k && k !== a); });
@@ -440,11 +482,57 @@ function bindNewsQuiz(root) {
   }));
 }
 /* ---------- 縮時影片 ---------- */
+/* ---------- 挑戰連結（/quest?ch=編號，用影片連結 vlinks 存：伺服器驗算過的那一局） ---------- */
+let CH = null; // 正在接受的挑戰：{ level, nick, speed, stars, unit }
+function vsHTML(sum) {
+  const mine = Math.round(sum.speed), his = Math.round(CH.speed), who = CH.nick ? esc(CH.nick) : "對方";
+  return `<p class="gain">⚔️ ${mine > his ? `你贏了 ${who}！` : mine === his ? `跟 ${who} 一樣快！` : `差一點，${who} 比你快 ${his - mine}。`}（你 ${mine}，${who} ${his} ${esc(CH.unit || "WPM")}）</p>`;
+}
+async function challengeUI(lv, out, sum) {
+  const box = $("#chal");
+  box.innerHTML = '<p class="hint">產生連結中…</p>';
+  let r;
+  try { const res = await fetch("/api/vlink", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "quest", level: lv.id, seg: out.seg || 0, stars: out.stars, rule: out.rule, events: out.events }) }); r = await res.json(); if (!res.ok) throw new Error(r.error); }
+  catch (e) { box.innerHTML = `<p class="nickrule">做不出連結：${esc(e.message || "連不上伺服器")}</p>`; return; }
+  const url = `${location.origin}/quest?ch=${r.id}`, name = lv.news ? lv.name : lv.custom ? lv.name : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
+  const text = `我在喵打「${name}」打了 ${Math.round(sum.speed)} ${unitTxt(lv)}，你打得贏嗎？`;
+  box.innerHTML = `<p><b>挑戰連結</b>（${r.days} 天內有效）：<input type="text" readonly value="${esc(url)}" aria-label="挑戰連結" class="chalurl"></p>
+    <p class="row"><button type="button" id="cCopy">複製連結</button>${navigator.share ? '<button type="button" id="cShare">分享…</button>' : ""}<button type="button" id="cQr">📱 QR code</button></p><div class="qrbox" hidden></div>`;
+  box.querySelector(".chalurl").addEventListener("focus", (e) => e.target.select());
+  $("#cCopy").onclick = async () => { try { await navigator.clipboard.writeText(`${text} ${url}`); toast("已複製，貼給朋友吧！"); } catch { box.querySelector(".chalurl").select(); toast("請按 Ctrl+C 複製"); } };
+  if ($("#cShare")) $("#cShare").onclick = () => navigator.share({ title: "喵打挑戰", text, url }).catch(() => {});
+  $("#cQr").onclick = async () => { const q = box.querySelector(".qrbox"); const { qrSVG } = await import("/qr.js"); q.innerHTML = qrSVG(url, 200); q.hidden = false; };
+}
+/** 直接打某一關：/quest?lv=關卡、/quest?ch=挑戰編號、/quest?boss（影片和挑戰連結用） */
+async function openLevel(id) {
+  if (id === "boss") { island = "boss"; return renderMap(); }
+  const nm = /^news-(.+)$/.exec(id); if (nm) return playNews(nm[1]);
+  const sm = /^set-(.+)$/.exec(id); if (sm) return playSet(sm[1]);
+  const lv = LEVELS.get(id);
+  if (!lv) { renderMap(); return toast("找不到這一關"); }
+  island = lv.island;
+  if (lv.login && !ST.login) { renderMap(); toast("這一關要登入才能玩"); return askLogin("（這一關要登入才能玩）"); }
+  if (!unlocked(lv, ST.stars)) { renderMap(); return toast("這一關還沒解鎖：先把前面的關卡打過（1 顆星就可以）"); }
+  play(lv);
+}
+async function startFromUrl() {
+  const q = new URLSearchParams(location.search);
+  if (q.has("ch")) {
+    const v = await api("/api/vlink/" + encodeURIComponent(q.get("ch")));
+    if (v.error || !v.level) { renderMap(); return toast("這個挑戰連結不存在或已經過期（7 天）"); }
+    CH = { level: v.level, nick: v.nick, speed: v.speed || 0, stars: v.stars, unit: v.unit };
+    toast(`${v.nick || "有人"} 在這一關打了 ${Math.round(v.speed || 0)} ${v.unit || "WPM"}，打贏他！`);
+    return openLevel(v.level);
+  }
+  if (q.has("lv")) return openLevel(q.get("lv"));
+  if (q.has("boss")) return openLevel("boss");
+  return false;
+}
 function videoUI(lv, out) {
   const title = lv.news ? `📰 ${fmtDate(lv.news.date)} ${lv.name}` : lv.custom ? `✎ ${lv.name}` : `${lv.chapter.split("-")[1]}-${lv.index + 1} ${lv.name}`;
   videoPanel($("#vid"), { scene: "battle", lang: lv.lang, texts: out.segTexts || lv.texts, boss: lv.boss, big: lv.big, rule: out.rule, events: out.events, outfit: ST.outfit, nick: ME.user?.nick || "", stars: out.stars, unit: "WPM", title }, {
     link: { kind: "quest", level: lv.id, seg: out.seg || 0, stars: out.stars, rule: out.rule, events: out.events }, toast, file: `meow-type-${lv.id}`,
-    shareText: `我在喵打打倒了${lv.boss.name}！你打得贏嗎？ https://meow-type.otlab.org/quest`,
+    shareText: `我在喵打打倒了${lv.boss.name}！你打得贏嗎？ ${location.origin}/quest?lv=${encodeURIComponent(lv.id)}`,
   });
 }
 $("#restart0").onclick = () => { if (R) play(R.lv, 0); };
@@ -502,7 +590,9 @@ addEventListener("resize", () => { if (R && !$("#play").hidden) TB.paint(); });
 (async () => {
   await loadMe();
   await loadState();
+  const fromUrl = /[?&](ch|lv|boss)\b/.test(location.search);
   if (SET_PATH) { await playSet(SET_PATH[1]); askLogin("（登入才會上這個題組的排行榜）"); }
+  else if (fromUrl) { await startFromUrl(); history.replaceState(null, "", "/quest"); }
   else { renderMap(); askLogin("（沒登入只能玩第 1 章）"); }
   if (ST.login && island !== "boss" && !SET_PATH) api("/api/boss").then((r) => { if (r.rewards?.length) toast("🌍 世界 Boss 被打倒了！到「世界 Boss」收下獎勵"); });
   window.__mtReady = true;
