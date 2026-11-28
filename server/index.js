@@ -51,6 +51,15 @@ const PATCHED = { 22: [22, 23, 4], 24: [24, 22, 1], 26: [26, 12, 1] };
 /* ---------- 正在打字的人（auto-update.sh 用來判斷能不能更新） ---------- */
 const active = new Map(); // sid → 開始時間
 const ACTIVE_MS = 3 * 60000;
+/* ---------- 線上人數（每個頁面每 40 秒報到；只放記憶體，90 秒沒報到就不算） ---------- */
+const onlineSeen = new Map(); // 瀏覽器代號 → 最後報到時間
+const ONLINE_MS = 90000;
+function onlineCount(id) {
+  const t = Date.now();
+  if (id && (onlineSeen.has(id) || onlineSeen.size < 20000)) onlineSeen.set(id, t);
+  for (const [k, v] of onlineSeen) if (t - v > ONLINE_MS) onlineSeen.delete(k);
+  return onlineSeen.size;
+}
 function playing() { const t = Date.now(); for (const [k, v] of active) if (t - v > ACTIVE_MS) active.delete(k); return active.size; }
 
 /* ---------- 靜態檔案 ---------- */
@@ -104,7 +113,7 @@ export const server = http.createServer(async (req, res) => {
       return json(res, 200, boards(p, cleanId(url.searchParams.get("me")), 5, currentUser(req)?.id ?? null));
     }
     if (url.pathname === "/stats" || url.pathname === "/stats/export.json") { res.writeHead(302, { Location: url.pathname === "/stats" ? "/admin" : "/admin/export.json" }); res.end(); return; } // 舊網址
-    if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing() });
+    if (url.pathname === "/healthz") return json(res, 200, { ok: true, version: APP_VERSION, label: VERSION_LABEL, node: process.versions.node, playing: playing(), online: onlineCount("") });
     if (url.pathname === "/version") return json(res, 200, { version: APP_VERSION, label: VERSION_LABEL });
     const imgId = /^\/c\/([0-9A-Za-z]{8})\.png$/.exec(url.pathname)?.[1];
     if (imgId) return sendShareImage(res, imgId);
@@ -204,6 +213,7 @@ async function handleApi(req, res, pathname) {
     }
     if (pathname === "/api/start") { const s = cleanId(body.sid); if (s && active.size < 5000) active.set(s, Date.now()); return json(res, 204); }
     if (pathname === "/api/end") { active.delete(cleanId(body.sid)); return json(res, 204); }
+    if (pathname === "/api/online") return json(res, 200, { n: onlineCount(/^[0-9a-z]{12}$/.test(body?.id || "") ? body.id : "") });
     if (pathname === "/api/visit") { recordVisit(body); return json(res, 204); }
     if (pathname === "/api/run") { recordRun(body, user?.id ?? null); return json(res, 204); }
     if (pathname === "/api/learn") { recordLearn(body, user?.id ?? null); return json(res, 204); }

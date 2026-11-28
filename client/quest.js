@@ -1,4 +1,5 @@
 // 喵打冒險模式：地圖、戰鬥、結算、換裝
+import "/online.js";
 import { ISLANDS, LEVELS, starsOf, unlocked, STAR_RULE, FISH, learnItem, withSegs, mergeSums, etaMin, SEG_MAX } from "/shared/quest.js";
 import { ITEMS, ITEM, SLOTS, DEFAULT_OUTFIT } from "/shared/items.js";
 import { BANK } from "/shared/bank.js";
@@ -89,6 +90,7 @@ $("#islands").addEventListener("click", (e) => {
 });
 $("#chapters").addEventListener("click", (e) => {
   const b = e.target.closest("[data-lv]"); if (b && !b.disabled) return play(LEVELS.get(b.dataset.lv));
+  const nl = e.target.closest("[data-nlearn]"); if (nl) return showNewsLearn(nl.dataset.nlearn);
   const n = e.target.closest("[data-news]"); if (n) return playNews(n.dataset.news);
   if (e.target.closest("#wbGo")) return playBoss();
   if (e.target.closest("#wbSeen")) return bossSeen();
@@ -105,8 +107,10 @@ async function renderNews() {
   if (r.error) { $("#chapters").innerHTML = `<p class="empty">${esc(r.error)}</p>`; return; }
   const todays = r.list.filter((n) => n.date === r.today), rest = r.list.filter((n) => n.date !== r.today);
   const doneToday = todays.some((n) => n.stars > 0);
-  const card = (n, big, i) => `<button type="button" class="lvl news${big ? " big" : ""}${n.stars ? " done" : ""}" data-news="${n.key}">
-    <span class="lvn">${big && todays.length > 1 ? `第 ${i + 1} 篇` : fmtDate(n.date)}・${esc(n.topic)}</span><span class="lvt">${esc(n.title)}</span><span class="lvs" aria-label="${n.stars} 顆星">${starsTxt(n.stars)}</span>${n.chars ? etaHTML({ id: "news-" + n.key, lang: "en", segs: new Array(n.chars > SEG_MAX * 1.2 ? Math.ceil(n.chars / SEG_MAX) : 1) }, null, n.chars) : ""}${big ? `<span class="go">${n.stars ? "再打一次" : doneToday ? "再打一篇" : "開始今日任務"} →</span>` : ""}</button>`;
+  // 打過的文章多一個「看全文與單字」：不用再打一次就能複習
+  const card = (n, big, i) => `<div class="ncard">${card0(n, big, i)}${n.stars ? `<button type="button" class="nlearn" data-nlearn="${n.key}">📖 看全文與單字</button>` : ""}</div>`;
+  const card0 = (n, big, i) => `<button type="button" class="lvl news${big ? " big" : ""}${n.stars ? " done" : ""}" data-news="${n.key}">
+    <span class="lvn">${big && todays.length > 1 ? `第 ${i + 1} 篇` : fmtDate(n.date)}・${esc(n.topic)}</span><span class="lvt">${esc(n.title)}</span><span class="lvs" aria-label="${n.stars} 顆星">${starsTxt(n.stars)}</span>${n.chars ? etaHTML({ id: "news-" + n.key, lang: "en", segs: new Array(((m) => (n.chars > m * 1.2 ? Math.ceil(n.chars / m) : 1))(n.key !== n.date ? 850 : SEG_MAX)) }, null, n.chars) : ""}${big ? `<span class="go">${n.stars ? "再打一次" : doneToday ? "再打一篇" : "開始今日任務"} →</span>` : ""}</button>`;
   $("#chapters").innerHTML = `<div class="chap"><h3>今日任務${doneToday ? '<span class="ok">✓ 今天完成了</span>' : ""}${ST.login && r.streak ? `<span class="streak">🔥 連續 ${r.streak} 天</span>` : ""}</h3>
     ${todays.length ? `<div class="today"><div class="tcards">${todays.map((n, i) => card(n, true, i)).join("")}</div><div class="board" id="nBoard"><p class="empty">排行榜載入中…</p></div></div>` : `<p class="empty">今天的新聞還沒出來（每天清晨更新），先玩以前的吧！</p>`}</div>
     ${rest.length ? `<div class="chap"><h3>以前的新聞</h3><ol class="lvls">${rest.map((n) => `<li>${card(n)}</li>`).join("")}</ol></div>` : ""}`;
@@ -471,6 +475,23 @@ async function playSet(id) {
   document.title = `${s.title}｜喵打`;
   play(withSegs(customLevel(s)));
 }
+async function showNewsLearn(key) {
+  const n = await api("/api/news/" + key);
+  if (n.error) return toast(n.error);
+  const ov = document.createElement("div");
+  ov.className = "ov"; ov.id = "nlOv"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true"); ov.setAttribute("aria-label", n.title);
+  ov.innerHTML = `<div class="panel nlpanel"><p class="hint">📰 ${fmtDate(n.date)}・${esc(n.topic)}</p><h2>${esc(n.title)}</h2>${newsLearn(n)}
+    <div class="btns"><button type="button" class="main" id="nlPlay">再打一次</button><button type="button" id="nlClose">關閉</button></div></div>`;
+  document.body.append(ov);
+  const close = () => { if (TTS) speechSynthesis.cancel(); ov.remove(); document.removeEventListener("keydown", esc_); };
+  const esc_ = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", esc_);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  bindNewsQuiz(ov);
+  $("#nlClose").onclick = close;
+  $("#nlPlay").onclick = () => { close(); play(withSegs(newsLevel(n))); };
+  $("#nlClose").focus({ preventScroll: true });
+}
 function bindNewsQuiz(root) {
   root.querySelectorAll(".say").forEach((b) => b.addEventListener("click", () => say(b.dataset.say, b)));
   root.querySelectorAll(".nq").forEach((fs) => fs.addEventListener("change", (e) => {
@@ -506,7 +527,7 @@ async function challengeUI(lv, out, sum) {
 /** 直接打某一關：/quest?lv=關卡、/quest?ch=挑戰編號、/quest?boss（影片和挑戰連結用） */
 async function openLevel(id) {
   if (id === "boss") { island = "boss"; return renderMap(); }
-  const nm = /^news-(.+)$/.exec(id); if (nm) return playNews(nm[1]);
+  const nm = /^news-(.+)$/.exec(id); if (nm) { island = "news"; return playNews(nm[1]); } // 打完「回新聞列表」回到新聞
   const sm = /^set-(.+)$/.exec(id); if (sm) return playSet(sm[1]);
   const lv = LEVELS.get(id);
   if (!lv) { renderMap(); return toast("找不到這一關"); }

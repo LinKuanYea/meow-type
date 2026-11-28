@@ -1,4 +1,5 @@
 // 喵打：前端
+import "/online.js";
 import { BANK, CAT_NAME, LEN_NAME, CODE_UNITS, randomSpec, textOf } from "/shared/bank.js";
 import { learnCard } from "/learn.js";
 import { ME, loadMe, onLogin, loginHint, nickField, bannedNote, askLogin } from "/account.js";

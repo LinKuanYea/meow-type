@@ -795,6 +795,12 @@ try {
   ok(vqd.scene === "battle" && vqd.texts.length && vqd.boss.name && vqd.stars === 3 && vqd.outfit?.fur && vqd.events.length > 10, "影片連結的內容（題目、怪物、星星、裝扮）");
   eq((await get("/v/" + vq.id)).status, 200, "手機上的影片頁");
   ok(vqd.level === "cpp-1-1" && vqd.speed > 0 && vqd.acc > 0.9, "影片／挑戰連結記下關卡和驗算過的速度（挑戰用）");
+  const on1 = await (await post("/api/online", JSON.stringify({ id: "abc123def456" }), { "Content-Type": "application/json" })).json();
+  const on2 = await (await post("/api/online", JSON.stringify({ id: "abc123def456" }), { "Content-Type": "application/json" })).json();
+  const on3 = await (await post("/api/online", JSON.stringify({ id: "zzz999zzz999" }), { "Content-Type": "application/json" })).json();
+  const on4 = await (await post("/api/online", JSON.stringify({ id: "<bad>" }), { "Content-Type": "application/json" })).json();
+  eq([on1.n, on2.n, on3.n, on4.n], [1, 1, 2, 2], "線上人數：同一個瀏覽器只算一次、亂寫的代號不算");
+  ok((await (await get("/healthz")).json()).online === 2 && (await (await get("/")).text()).includes('id="online"'), "線上人數：healthz、首頁");
   ok((await get("/quest?ch=" + vq.id)).status === 200 && (await get("/quest?lv=cpp-1-2")).status === 200, "挑戰連結、關卡連結打開冒險模式頁");
   const vp = await (await xAdvpost("/api/vlink", { kind: "practice", c: "cpp", l: "para", m: "full", rule: "back", specs: [spec], events: evs })).json();
   const vpd = await (await get("/api/vlink/" + vp.id)).json();
